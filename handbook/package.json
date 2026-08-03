@@ -1,0 +1,8 @@
+{
+  "name": "typescript-syntax-handbook-examples",
+  "private": true,
+  "scripts": {
+    "check": "npx --yes --package typescript@7.0.2 tsc -p tsconfig.json",
+    "check:links": "fd -j 1 -e md -x npm.cmd --cache %TEMP%\\ts2bin-markdown-link-check exec --yes --package markdown-link-check -- markdown-link-check --quiet --config .markdown-link-check.json {}"
+  }
+}
