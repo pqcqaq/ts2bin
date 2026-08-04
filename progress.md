@@ -136,3 +136,13 @@
 - 第 3 批 `1a3d1d8 docs(plans): define ts2bin architecture and engineering standards`：架构、IR、runtime、路线图、流程、编码、测试和提交规范。
 - handbook 的 `npm run check` 与 `npm run check:links` 通过；13 份 plans 的本地链接、围栏、占位和 whitespace 检查通过。
 - 根目录研究、发现、任务和进度记录作为最后一批提交，形成从资料审计到工程落地的完整轨迹。
+
+## 2026-08-04 实现级算法规格
+
+- 新增 `plans/implementation-specification.md`，固定 Program/snapshot/subset gate/type plan/HIR/MIR/capability/LLVM 主算法、checker 生命周期和 pass 顺序。
+- 新增 `plans/syntax-lowering-algorithms.md`，逐类规定表达式、PlaceRef、求值顺序、控制流、声明、class、module、async/generator、JSX/decorator 和 synthetic Kind 的 lowering。
+- 新增 `plans/type-system-and-variance-algorithms.md`，规定 TsType/RepType、双层兼容性、union/intersection、递归方差 SCC 固定点、function adapter、泛型单态化和断言链算法。
+- 新增 `plans/runtime-and-backend-lowering-algorithms.md`，规定对象/字符串/数组/闭包布局、shadow-stack tracing GC、module SCC、native EH、Promise/async/generator 和 MIR 到 LLVM/object/link 算法。
+- 新增 `plans/unsupported-semantics-and-diagnostics.md`，规定 static/interop/unsafe 边界、必须拒绝的动态行为、capability/target 失败、稳定诊断和新能力准入门禁。
+- 更新 plans 总导航、六阶段路线图和 lowering 细则交叉引用，使实现代码能够从总规格进入并定位唯一算法契约。
+- 一致性审计修正旧 `setjmp` EH 建议、模块 import 顺序和 optional/indexed read-write 类型规则；18 份 plans 文档的本地链接、围栏、占位词、行尾空白和 `git diff --check` 均通过，typescript-go submodule 保持干净。

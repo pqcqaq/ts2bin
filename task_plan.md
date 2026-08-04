@@ -84,3 +84,13 @@
 | N. 初始格式基线 | complete | 只移除 `git diff --check` 报告的多余 EOF 空行 |
 | O. 原子提交拆分 | complete | 按仓库、handbook、plans、项目记录四批构建本地历史 |
 | P. 历史与工作树复核 | complete | 检查提交顺序、内容、测试、submodule 和最终状态 |
+
+## 实现级算法规格阶段（2026-08-04）
+
+| 阶段 | 状态 | 说明 |
+| --- | --- | --- |
+| Q. tsgo 与既有规格算法审计 | complete | 核对 AST Kind、transform 顺序、variance worker 和 IR 不变量 |
+| R. 全语法 lowering 规格 | complete | 按表达式、语句、声明、类、模块和现代语法给出 AST→HIR/MIR 算法 |
+| S. 类型、泛型与方差算法 | complete | 完成规范化、表示选择、assignability、variance SCC、adapter 和单态化算法 |
+| T. runtime/backend 与拒绝策略 | complete | 完成对象布局、异常、async、GC、LLVM lowering、能力边界和诊断算法 |
+| U. 总入口、交叉引用与静态复核 | complete | 串联实现文档并通过覆盖、链接、围栏、格式和术语一致性检查 |

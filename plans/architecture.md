@@ -234,7 +234,7 @@ tsgo 已实现 `Invariant/Covariant/Contravariant/Bivariant/Independent` 及 unr
 
 ### 异常
 
-MIR 使用 `invoke`/异常边和 cleanup 栈；LLVM backend 再选择平台 personality。不能把 `throw` 编成普通返回值，也不能遗漏 `finally`。若目标平台/运行时尚未提供 zero-cost EH，先实现 runtime `setjmp` 兼容 profile，但 ABI 必须固定。
+MIR 使用 `invoke`/异常边和 cleanup 栈；LLVM backend 再选择平台 personality。不能把 `throw` 编成普通返回值，也不能遗漏 `finally`。不支持 native unwind 的目标使用独立、全链一致的 status-code/result lowering profile；不得以 `setjmp/longjmp` 绕过 cleanup、GC root 生命周期和 LLVM 优化约束。
 
 ### async/await
 

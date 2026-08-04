@@ -96,3 +96,7 @@
 - Program/checker、snapshot、HIR/MIR pass、variance/dynamic、runtime/GC/EH 和 LLVM mapping 属于强制核心注释区域；所有导出 API、配置、诊断、IR 节点和 runtime ABI 必须有契约型文档注释。
 - 所有测试必须可单独、乱序、重复和按安全条件并行/分片运行；fixture 只读、workspace 每 case 独享，禁止共享可变状态、固定端口、真实网络和前序测试产物。
 - 父仓库提交采用 Conventional Commits 风格并记录 issue、Test、Audit；submodule 更新必须独立提交并同步 lock、stdlib manifest 和兼容性审计。
+- tsgo `getVariancesWorker` 通过把单个类型参数分别替换为已知 super/sub marker，双向调用 assignability 推导 covariant/contravariant/bivariant/invariant；若 bivariant 再用 unrelated marker 验证 independent，并传播 `Unmeasurable`/`Unreliable`。
+- tsgo 对显式 `out`、`in` 直接采用声明方差；类型参数关系比较按 covariant 正向、contravariant 反向、bivariant 任一方向、invariant 双向执行，unmeasurable 只接受 identity/完全相同。
+- tsgo 将 `Array`、`ReadonlyArray` 和 tuple 统一走预置 covariance 快路径，且源码明确承认“pretend array is covariant”；Bingo 必须在可写位置重新计算 layout variance，把 mutable Array/tuple 视为 invariant。
+- tsgo emitter 顺序为 metadata（可选）→ type erasure → import elision → enum/namespace/parameter-property runtime syntax → legacy decorators → JSX → ES downlevel → use strict → module → const-enum inline；该顺序只用于行为 oracle，Bingo 使用独立 typed HIR/MIR pass。

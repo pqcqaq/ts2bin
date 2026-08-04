@@ -8,14 +8,19 @@
 2. [tsgo-integration.md](tsgo-integration.md)：本地 `typescript-go` 的版本锁定、Program/checker 生命周期、快照和模块图契约。
 3. [typescript-support-matrix.md](typescript-support-matrix.md)：按 AST Kind、语义行为和 profile 划分支持、消糖、运行时和拒绝规则。
 4. [bingo-ir-spec.md](bingo-ir-spec.md)：Typed Snapshot 之后的 HIR/MIR 类型、指令、effect、unsafe provenance 与 verifier。
-5. [stdlib-runtime-plan.md](stdlib-runtime-plan.md)：`handbook/stdlib` 与 `typescript-go` 内置 `.d.ts` 到 capability manifest、runtime ABI 和 GC 的映射。
-6. [development-roadmap.md](development-roadmap.md)：六阶段实施顺序、依赖、交付物、验收门槛和 issue 分组。
-7. [testing-conformance-and-release.md](testing-conformance-and-release.md)：测试资产、差分/fuzz、标准库覆盖、CI、缓存和发布门禁。
-8. [implementation-backlog.md](implementation-backlog.md)：可直接创建 issue 的编号、依赖、验收命令和第一条纵向实现路径。
-9. [compiler-development-process.md](compiler-development-process.md)：从 issue 分诊、设计、实现、自审、审计到合并和发布的强制流程。
-10. [coding-and-maintainability-standards.md](coding-and-maintainability-standards.md)：抽象准入、核心流程注释、公共 API 文档、错误和生命周期规范。
-11. [test-authoring-standards.md](test-authoring-standards.md)：测试库、fixture、golden、独立性、乱序/并发/重复运行规范。
-12. [git-and-commit-standards.md](git-and-commit-standards.md)：父仓库/submodule、分支、提交消息、合并和发布标签规范。
+5. [implementation-specification.md](implementation-specification.md)：实现级总入口、完整编译主算法、snapshot/subset gate、pass 顺序和完成门禁。
+6. [syntax-lowering-algorithms.md](syntax-lowering-algorithms.md)：逐类 TypeScript AST 到 HIR/MIR 的转换、单次求值、消糖和特殊路径。
+7. [type-system-and-variance-algorithms.md](type-system-and-variance-algorithms.md)：类型规范化、表示选择、泛型单态化、方差固定点和 adapter/thunk。
+8. [runtime-and-backend-lowering-algorithms.md](runtime-and-backend-lowering-algorithms.md)：对象布局、GC、模块、EH、异步状态机和 MIR 到 LLVM 算法。
+9. [unsupported-semantics-and-diagnostics.md](unsupported-semantics-and-diagnostics.md)：必须拒绝的行为、profile 边界、诊断编号和能力准入门禁。
+10. [stdlib-runtime-plan.md](stdlib-runtime-plan.md)：`handbook/stdlib` 与 `typescript-go` 内置 `.d.ts` 到 capability manifest、runtime ABI 和 GC 的映射。
+11. [development-roadmap.md](development-roadmap.md)：六阶段实施顺序、依赖、交付物、验收门槛和 issue 分组。
+12. [testing-conformance-and-release.md](testing-conformance-and-release.md)：测试资产、差分/fuzz、标准库覆盖、CI、缓存和发布门禁。
+13. [implementation-backlog.md](implementation-backlog.md)：可直接创建 issue 的编号、依赖、验收命令和第一条纵向实现路径。
+14. [compiler-development-process.md](compiler-development-process.md)：从 issue 分诊、设计、实现、自审、审计到合并和发布的强制流程。
+15. [coding-and-maintainability-standards.md](coding-and-maintainability-standards.md)：抽象准入、核心流程注释、公共 API 文档、错误和生命周期规范。
+16. [test-authoring-standards.md](test-authoring-standards.md)：测试库、fixture、golden、独立性、乱序/并发/重复运行规范。
+17. [git-and-commit-standards.md](git-and-commit-standards.md)：父仓库/submodule、分支、提交消息、合并和发布标签规范。
 
 建议的阅读方式是先读架构确定边界，再读 tsgo 集成和支持矩阵锁定输入；实现 HIR/MIR 时以 IR 规格为唯一约束；进入 runtime 或 LLVM 阶段前，必须同时满足标准库 capability 和测试发布文档的门禁。
 
@@ -51,6 +56,10 @@ TypeScript source
 | tsgo 解析、类型和模块结果 | `tsgo-integration.md` + 锁定 commit | `ProgramSnapshot`、AST Kind manifest、snapshot golden |
 | 哪些 TS 语法可以进入编译链 | `typescript-support-matrix.md` | subset gate、BINGO 诊断和语法覆盖报告 |
 | HIR/MIR 的类型和控制流不变量 | `bingo-ir-spec.md` | IR schema、verifier、HIR/MIR golden |
+| 每种语法具体如何转换 | `syntax-lowering-algorithms.md` | AST handler registry、求值顺序 proof、lowering golden |
+| 类型、泛型和方差如何实现 | `type-system-and-variance-algorithms.md` | Type/Rep plan、variance SCC、specialization/adapter report |
+| runtime 和 LLVM 如何落地 | `runtime-and-backend-lowering-algorithms.md` | layout/ABI manifest、root map、状态机、LLVM/object artifact |
+| 哪些行为必须拒绝 | `unsupported-semantics-and-diagnostics.md` | diagnostic registry、boundary record、support report |
 | ES 标准库和宿主 API 是否可链接 | `stdlib-runtime-plan.md` | capability manifest、ABI hash、runtime tests |
 | 何时算完成、如何回归和发布 | `testing-conformance-and-release.md` | case manifest、差分报告、CI/reproducibility 报告 |
 | 如何拆 issue 并安排第一条纵切 | `implementation-backlog.md` | 稳定 issue ID、依赖 DAG、阶段退出命令 |

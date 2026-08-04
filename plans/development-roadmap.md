@@ -2,7 +2,7 @@
 
 本计划把 `ast2bingo` 拆成六个可独立验收的阶段。每阶段都必须增加源码样例、诊断 golden、HIR/MIR golden 和最少一组可运行测试；未通过上一阶段退出条件，不进入下一阶段扩展语法。
 
-阶段的输入和产物必须分别对照 [tsgo-integration.md](tsgo-integration.md)、[bingo-ir-spec.md](bingo-ir-spec.md)、[stdlib-runtime-plan.md](stdlib-runtime-plan.md) 和 [testing-conformance-and-release.md](testing-conformance-and-release.md)。本文件只定义实施顺序，不重复定义这些契约；若路线图与 verifier、capability manifest 或 case manifest 冲突，以后者为准。需要直接拆 issue 时使用 [implementation-backlog.md](implementation-backlog.md)，其中的编号和依赖是执行层契约。
+阶段的输入和产物必须分别对照 [tsgo-integration.md](tsgo-integration.md)、[bingo-ir-spec.md](bingo-ir-spec.md)、[stdlib-runtime-plan.md](stdlib-runtime-plan.md) 和 [testing-conformance-and-release.md](testing-conformance-and-release.md)。实际编码从 [implementation-specification.md](implementation-specification.md) 进入，并同时遵守逐语法 lowering、类型/方差、runtime/backend 和拒绝诊断四份细则。本文件只定义实施顺序，不重复定义这些契约；若路线图与 verifier、capability manifest 或 case manifest 冲突，以后者为准。需要直接拆 issue 时使用 [implementation-backlog.md](implementation-backlog.md)，其中的编号和依赖是执行层契约。
 
 ## 总体顺序
 
