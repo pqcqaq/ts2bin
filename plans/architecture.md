@@ -32,7 +32,7 @@ typescript-go/                         # 维护中的薄 fork
   internal/bingo/verify/                # HIR/MIR verifier
   internal/llvmbackend/                 # Bingo MIR -> go-llvm
   internal/runtimeabi/                  # runtime 函数签名与布局契约
-  runtime/bingo-rt/                     # Go/C/LLVM runtime implementation
+  runtime/bingo-rt/                     # Rust workspace and umbrella staticlib
   testdata/ts2bin/                      # source、diagnostics、HIR/MIR/LLVM golden
 ```
 
@@ -43,7 +43,7 @@ typescript-go/                         # 维护中的薄 fork
 | 边界 | 详细规格 | 进入下一层的门槛 |
 | --- | --- | --- |
 | tsgo -> snapshot | [tsgo-integration.md](tsgo-integration.md) | 诊断通过、ID 稳定、checker 已 release |
-| snapshot -> HIR/MIR | [bingo-ir-spec.md](bingo-ir-spec.md) | 类型、布局、CFG 和 effect 通过 verifier |
+| snapshot + BuildPlan -> HIR/MIR | [bingo-ir-spec.md](bingo-ir-spec.md) | BuildPlan 已规范化，Phase 2A 已解析 TargetContext，类型、布局、CFG 和 effect 通过 verifier |
 | `.d.ts` -> runtime | [stdlib-runtime-plan.md](stdlib-runtime-plan.md) | capability manifest 有实现且 ABI hash 匹配 |
 | 源码 -> 发布物 | [testing-conformance-and-release.md](testing-conformance-and-release.md) | conformance、差分、LLVM verifier、可复现构建通过 |
 | 规格 -> 开发任务 | [implementation-backlog.md](implementation-backlog.md) | issue 依赖、artifact 和验收命令齐全 |
@@ -58,17 +58,29 @@ typescript-go/                         # 维护中的薄 fork
 flowchart LR
   A[TS source + tsconfig] --> B[typescript-go Program]
   B --> C[parse / bind / type check]
-  C --> D[immutable typed snapshot]
-  D --> E[subset gate]
-  E --> F[Bingo HIR]
-  F --> G[generic specialization]
-  G --> H[Bingo MIR]
-  H --> I[MIR verifier]
-  I --> J[LLVM IR backend]
-  J --> K[LLVM verifier and passes]
-  K --> L[target machine / linker]
-  M[bingo-rt] --> L
+  C --> D[target-independent typed snapshot]
+  D --> E[subset gate + canonical BuildPlan]
+  E --> F[source type plan]
+  F --> G[typed HIR + semantic desugaring]
+  G --> H[specialization fixed point]
+  H --> I[variance / conversion]
+  I --> J[Phase 2A ResolveTargetContext]
+  T[toolchain and runtime manifests] --> J
+  J --> K[target representation / layout]
+  K --> L[MIR CFG/SSA + cleanup/EH/async]
+  L --> M[structural MIR verify]
+  M --> N[capability binding + effect freeze]
+  N --> O[proven MIR optimization]
+  O --> P[root placement + cleanup freeze]
+  P --> Q[final MIR verify]
+  Q --> R[LLVM IR / verifier / object]
+  R --> S[target machine / linker]
+  U[bingo-rt umbrella] --> S
 ```
+
+`BuildPlan` 是绑定 `FrontendSnapshot` 的 canonical、不可变但尚未解析的 backend request；其中的 target、CPU/features、runtime、GC、异常和 LLVM 版本只表达用户请求，不证明本机或发布工具链可执行。`ResolveBuildPlan` 只负责默认值、规范化、校验和哈希。Phase 2A 必须调用 `ResolveTargetContext(BuildPlan, toolchain manifest, runtime manifest)`，验证请求并冻结 data layout、ABI、调用约定、异常/GC profile 及 manifest hash；失败时在表示规划前 fail closed。`RepresentationPlan`、MIR 和 LLVM backend 只能消费该 `TargetContext`，不能直接把 `BuildPlan` 当作已解析目标。
+
+`bingo-rt` 使用 Rust 实现，并为每个 target/profile/feature set 预编译一个 umbrella `staticlib`（`.a`/`.lib`）。workspace 内部 crate 使用 Rust `rlib` 依赖关系，不把多个各自携带 Rust 传递依赖的 `staticlib` 混链；BigInt、RegExp、ICU 等独立外部引擎可由 capability 闭包额外选择。LLVM 生成代码只通过版本化 `extern "C"` ABI 调用 runtime；用户对象、self-hosted stdlib object、startup object、唯一 umbrella runtime 和显式外部引擎 archive 最终由 LLD 链接。Rust ABI、trait object、panic 和 Rust 标准库容器不得进入 Bingo public ABI；详细契约见 [rust-runtime-and-linking.md](rust-runtime-and-linking.md)。
 
 每一步的输入输出都可序列化：失败时打印源位置、Bingo 节点 ID、源类型和目标 LLVM 类型。这样可以定位“TypeScript 类型正确但 lowering 错误”和“LLVM verifier 错误”两种完全不同的问题。
 
@@ -77,17 +89,19 @@ flowchart LR
 快照是不可变的内部 DTO，而不是 `ast.Node` 指针的长期缓存。建议字段：
 
 ```text
-NodeId, SourceSpan, SyntaxKind
+NodeId, SourceSpan, SyntaxKind, SyntaxPayload, NamedChildEdges
 SymbolId, ResolvedSymbolId, DeclarationId
 TypeId, ContextualTypeId, NarrowedTypeId
 SignatureId, SelectedOverload, TypeArguments
 FlowFacts, CaptureSet, ModuleId
-ConstantValue, RuntimeRepresentation, Effects
+ConstantValue, SourceTypePayload
 ```
 
-快照阶段要保存“类型查询结果”而不是只保存语法类型节点：`T[K]`、条件类型、映射类型和重载需要 checker 已解析的结果。若类型仍是未实例化 type parameter 或不可测量 variance，快照应标记为 unresolved，交给 subset gate 拒绝或进入动态 profile。
+快照阶段要保存“类型查询结果”而不是只保存语法类型节点：`T[K]`、条件类型、映射类型和重载需要 checker 已解析的结果。`SyntaxPayload` 和具名 child edge 必须足以在不重新打开 AST、checker 或未校验源文件的前提下完成 lowering；不能把 `IterChildren` 的无名顺序当作持久化语法契约。若类型仍是未实例化 type parameter 或不可测量 variance，快照应保留可诊断的 source type 状态，交给 subset gate 或后续 specialization 决定是否拒绝。
 
-快照是整个编译链的并行边界：同一 checker 借用期间按文件捕获，release 后才允许 HIR lowering 并行。快照内容必须带 `typescriptGoCommit`、stdlib manifest hash、profile 和 schema version；因此它既是调试产物，也是增量缓存的输入，而不是临时日志。
+快照是整个编译链的并行边界：同一 checker 借用期间按文件捕获，release 后才允许 HIR lowering 并行。raw `ProgramSnapshot` 是 `FrontendSnapshot` artifact 的序列化根对象，只包含会改变 tsgo 前端语义的配置、规范化源码身份/内容、`typescriptGoCommit`、stdlib declaration hash 和 snapshot schema version；它不得包含 target triple、CPU/features、GC、异常模型、runtime capability、优化级别或 emit 选择。
+
+profile、target、runtime capability 和输出选项在 subset gate/build planning 阶段进入 canonical `BuildPlan`，但此时仍是未解析请求。缓存键分层为 `FrontendSnapshotKey = hash(frontend semantic inputs)` 与 `BuildArtifactKey = hash(FrontendSnapshotKey, BuildPlan, TargetContext, runtime/ABI/layout/lowering hashes)`，因此同一 typed snapshot 可以安全复用于多个 target，而 target-dependent 诊断和产物不会错误共享。
 
 ### 3.2 Bingo HIR
 
@@ -116,7 +130,7 @@ MIR 是 LLVM 的前一层，必须显式表示：
 
 - 基本块、跳转、phi/SSA 值和不可达块。
 - `alloc_local`、`load`、`store`、字段/元素访问、边界检查和空值检查。
-- `call_direct`、`call_indirect`、闭包环境、方法 dispatch、异常 invoke。
+- `call_direct`、`call_indirect`、闭包环境、方法 dispatch，以及平台无关的 normal/exception successor。
 - `convert`、`checked_cast`、`dynamic_box` 和 `dynamic_unbox`。
 - `cleanup_push`、`cleanup_pop`、`defer`、异常边和函数返回边。
 - `await`/`yield` 的状态机保存点。
@@ -124,7 +138,26 @@ MIR 是 LLVM 的前一层，必须显式表示：
 
 MIR verifier 应拒绝：未定义值、支配关系错误、phi 入边不完整、类型不匹配、错误的异常边、重复释放和未处理 cleanup。
 
-HIR 到 MIR 的 pass 顺序固定为：类型/表示规范化 -> 显式求值顺序 -> 控制流与 phi -> 泛型实例化 -> variance adapter/checked cast -> cleanup/异常边 -> async/generator 状态机 -> runtime capability 绑定。pass 只能追加已验证事实，不能重新调用 checker 猜测源类型；完整规则见 [bingo-ir-spec.md](bingo-ir-spec.md)。
+HIR 到最终 MIR 使用唯一的分层 pass DAG，而不是把 HIR、CFG、target layout 和 GC pass 混成一个线性列表：
+
+```text
+source type normalization
+  -> typed HIR construction and semantic desugaring
+  -> generic specialization worklist to fixed point
+  -> variance/conversion validation
+  -> ResolveTargetContext(BuildPlan, toolchain/runtime manifests)
+  -> target representation, layout and calling convention selection
+  -> HIR-to-MIR evaluation order + CFG/SSA lowering
+  -> cleanup / exception-profile / async-state lowering
+  -> structural MIR verification
+  -> runtime capability binding and exact effect freeze
+  -> proven MIR simplification / escape analysis
+  -> GC root placement and cleanup freeze
+  -> final MIR verification
+  -> LLVM emission
+```
+
+HIR verifier 负责 source types、结构化控制流、求值顺序和 effect；MIR verifier 负责 RepType、dominance/phi、布局、cleanup、已绑定 capability 和 safepoint root。specialization 是可重复 worklist：后续 desugaring 若产生新实例，必须回到 fixed point，不能把未实例化 type parameter 留给 MIR。target-dependent pass 必须读取已解析 `TargetContext`，任何 pass 都不能重新调用 checker 猜测源类型；完整规则见 [bingo-ir-spec.md](bingo-ir-spec.md) 和 [implementation-specification.md](implementation-specification.md)。
 
 ## 4. 运行时表示与 ABI
 
@@ -145,7 +178,7 @@ HIR 到 MIR 的 pass 顺序固定为：类型/表示规范化 -> 显式求值顺
 | `ReadonlyArray<T>` | `ArrayRef<T>` 只读 view | 元素类型可协变 |
 | 函数类型 | `FuncRef{code, env, signature}` | 闭包环境不可丢失 |
 
-静态 profile 的默认运行时组合为 `gc=tracing`、显式边界检查、严格函数参数逆变和版本化 runtime ABI。`gc=arc`、`gc=arena`、`dynamic`、`Proxy` 和宿主 FFI 都必须由 profile 明确开启，并在快照、MIR 和产物 provenance 中记录。
+静态 profile 的默认运行时组合为 `gc=single-mutator-tracing-nonmoving`、显式边界检查、严格函数参数逆变和版本化 runtime ABI。`gc=arc`、`gc=arena`、`dynamic`、`Proxy` 和宿主 FFI 都必须由 profile 明确开启，并在 `BuildPlan`、MIR artifact 和最终产物 provenance 中记录；它们不得污染 raw frontend snapshot。
 
 `number` 采用 `f64` 是语义选择，不是 LLVM 默认选择；不要把所有 TS `number` 直接降成 `i32`。位运算、数组索引、移位和整数 API 必须生成明确的 `f64 -> i32/u32` 转换及溢出/截断策略。
 
@@ -160,6 +193,29 @@ dynamic profile 提供 `DynamicValue`（tag + payload）、属性字典、原型
 - 普通对象字面量按 shape 分配；shape 不稳定时进入 dynamic profile。
 - `#private` 字段使用隐藏 slot 或 class-private descriptor，不能退化为公开字符串属性。
 - `static {}` 降为类初始化函数，按模块初始化顺序执行。
+
+结构化对象跨布局默认生成显式 `ObjectView` 或拒绝。`ObjectView` 保存 source object identity 与 frozen property/accessor/offset mapping；只读 view 可以协变，可写 view 只有在 source/target 的读写类型、store representation 和 aliasing 全部等价时允许。identity/equality 始终落到原对象；隐式字段复制不能伪装成 identity conversion，显式 copy adapter 必须声明会产生新 identity。
+
+### 4.4 Runtime 实现与链接
+
+runtime core 使用 Rust，而不是由 Go 或 C 实现。目标不是假设 Rust 自动解决 GC 或 ABI 安全，而是把原始指针、layout、root、write barrier、原子和平台 FFI 限制在可审计的 `unsafe` 边界内；字符串、集合、Promise 状态和大部分算法保持 safe Rust。
+
+发布物按 target/profile 携带：
+
+```text
+startup object
++ one Rust umbrella staticlib
++ optional external-engine archives
+capability manifest
+ABI/layout manifest
+runtime lock and artifact hashes
+```
+
+Rust 导出函数使用带 ABI major 的 `extern "C"` symbol，普通失败通过 status/exception handle 回到 MIR 异常边；release runtime 使用 `panic=abort`，panic 不得表达 TypeScript `throw` 或穿越 ABI。首个可执行异常契约是全链 status-code/result lowering；native unwind 是后续 target-specific profile，Rust helper 仍保持 `nounwind`，由已审计的平台 shim 把 exception carrier 转为 unwind。不同异常 profile 的 object/runtime 不得混链。
+
+Bingo 使用自有 tracing GC；GC v1 明确为 single-mutator、stop-the-world、非移动 collector，不承诺并发 mutator、`Atomics` 或跨线程直接回调。`Gc<T>` 不等于 root，跨 MayAllocate/MaySuspend/host call 的活跃引用必须由编译器 root map 或 runtime `Root<T>` 保护。引入第二 mutator、并发/增量 GC 或 LLVM statepoint 都属于新的 ABI/verifier profile。
+
+首版只把唯一 Rust umbrella native archive 作为稳定 runtime 发布边界，不发布 Rust bitcode ABI，也不启用跨语言 LTO。高层 Array/String/Iterator/Promise 等规范算法优先以受限 TypeScript 自举并作为已验证 HIR/package 分发；底层 storage、内部槽、GC、hash/equality 和调度器由 Rust 提供。
 
 ## 5. TypeScript 类型语义
 
@@ -234,7 +290,7 @@ tsgo 已实现 `Invariant/Covariant/Contravariant/Bivariant/Independent` 及 unr
 
 ### 异常
 
-MIR 使用 `invoke`/异常边和 cleanup 栈；LLVM backend 再选择平台 personality。不能把 `throw` 编成普通返回值，也不能遗漏 `finally`。不支持 native unwind 的目标使用独立、全链一致的 status-code/result lowering profile；不得以 `setjmp/longjmp` 绕过 cleanup、GC root 生命周期和 LLVM 优化约束。
+MIR 保留平台无关的 exception edge 和 cleanup region，但具体 lowering 分两步交付。基线 status-code profile 把 `throw`、MayThrow call 和 cleanup dispatch 编成显式 CFG/result 传播；所有可达函数、runtime 和 object 必须使用同一 profile。native-unwind profile 只在 target personality、throw/rethrow shim、exception carrier ownership、foreign-exception policy 和 shadow-stack cleanup 均通过目标机测试后启用，再把相同 MIR edge 映射为 `invoke`/unwind。Rust helper 始终以 `nounwind` status 返回，只有平台 shim 可以启动 Bingo unwind。两种 profile 都不能遗漏 `finally`，也不得使用 `setjmp/longjmp` 绕过 cleanup、GC root 生命周期和 LLVM 优化约束。
 
 ### async/await
 
@@ -255,6 +311,10 @@ llc -filetype=obj generated.ll
 ```
 
 Windows 开发优先使用 WSL2/Linux 或容器；TinyGo bindings 的预置 cgo 配置主要覆盖 Linux/macOS/FreeBSD，原生 Windows 需要 `byollvm` 和手动 CFLAGS/LDFLAGS。
+
+LLVM 生成 `app.o`/`app.obj` 后，backend 根据 bound MIR intrinsic 计算 runtime capability 闭包，选择 target/profile/ABI hash 完全一致的唯一 Rust umbrella staticlib 和显式外部引擎 archives，并生成确定性 linker response file。ELF 使用 `ld.lld`，COFF 使用 `lld-link`，Mach-O 使用锁定的 LLD 兼容 driver。链接器不得从系统默认路径偶然选择另一个 runtime；最终产物必须记录 rustc build ID、Cargo lock/features、umbrella archive hash、LLD 和 ABI/layout/capability hash。
+
+真实后端不能等到高级 runtime 全部完成才验证。`VERT-001` 在对象、GC、异常和异步之前锁定一条 `x86_64-unknown-linux-gnu` primitive 纵切：`add(number, number)` 必须经过 target-independent snapshot、HIR/MIR verifier、真实 go-llvm、LLVM verifier、object emission、空 startup/umbrella runtime 与 LLD，并由运行 harness 验证结果。该纵切不承诺完整 runtime 或第二目标，但它是后续 pass、ABI 和工具链变更的强制回归门禁。
 
 ## 9. 诊断模型
 

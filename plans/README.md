@@ -12,24 +12,26 @@
 6. [syntax-lowering-algorithms.md](syntax-lowering-algorithms.md)：逐类 TypeScript AST 到 HIR/MIR 的转换、单次求值、消糖和特殊路径。
 7. [type-system-and-variance-algorithms.md](type-system-and-variance-algorithms.md)：类型规范化、表示选择、泛型单态化、方差固定点和 adapter/thunk。
 8. [runtime-and-backend-lowering-algorithms.md](runtime-and-backend-lowering-algorithms.md)：对象布局、GC、模块、EH、异步状态机和 MIR 到 LLVM 算法。
-9. [unsupported-semantics-and-diagnostics.md](unsupported-semantics-and-diagnostics.md)：必须拒绝的行为、profile 边界、诊断编号和能力准入门禁。
-10. [stdlib-runtime-plan.md](stdlib-runtime-plan.md)：`handbook/stdlib` 与 `typescript-go` 内置 `.d.ts` 到 capability manifest、runtime ABI 和 GC 的映射。
-11. [development-roadmap.md](development-roadmap.md)：六阶段实施顺序、依赖、交付物、验收门槛和 issue 分组。
-12. [testing-conformance-and-release.md](testing-conformance-and-release.md)：测试资产、差分/fuzz、标准库覆盖、CI、缓存和发布门禁。
-13. [implementation-backlog.md](implementation-backlog.md)：可直接创建 issue 的编号、依赖、验收命令和第一条纵向实现路径。
-14. [compiler-development-process.md](compiler-development-process.md)：从 issue 分诊、设计、实现、自审、审计到合并和发布的强制流程。
-15. [coding-and-maintainability-standards.md](coding-and-maintainability-standards.md)：抽象准入、核心流程注释、公共 API 文档、错误和生命周期规范。
-16. [test-authoring-standards.md](test-authoring-standards.md)：测试库、fixture、golden、独立性、乱序/并发/重复运行规范。
-17. [git-and-commit-standards.md](git-and-commit-standards.md)：父仓库/submodule、分支、提交消息、合并和发布标签规范。
+9. [rust-runtime-and-linking.md](rust-runtime-and-linking.md)：Rust runtime core、`extern "C"` ABI、unsafe/GC 边界、`staticlib` 构建和 LLD 链接契约。
+10. [unsupported-semantics-and-diagnostics.md](unsupported-semantics-and-diagnostics.md)：必须拒绝的行为、profile 边界、诊断编号和能力准入门禁。
+11. [stdlib-runtime-plan.md](stdlib-runtime-plan.md)：`handbook/stdlib` 与 `typescript-go` 内置 `.d.ts` 到 capability manifest、runtime ABI 和 GC 的映射。
+12. [development-roadmap.md](development-roadmap.md)：六阶段实施顺序、依赖、交付物、验收门槛和 issue 分组。
+13. [testing-conformance-and-release.md](testing-conformance-and-release.md)：测试资产、差分/fuzz、标准库覆盖、CI、缓存和发布门禁。
+14. [implementation-backlog.md](implementation-backlog.md)：可直接创建 issue 的编号、依赖、验收命令和第一条纵向实现路径。
+15. [compiler-development-process.md](compiler-development-process.md)：从 issue 分诊、设计、实现、自审、审计到合并和发布的强制流程。
+16. [coding-and-maintainability-standards.md](coding-and-maintainability-standards.md)：抽象准入、核心流程注释、公共 API 文档、错误和生命周期规范。
+17. [test-authoring-standards.md](test-authoring-standards.md)：测试库、fixture、golden、独立性、乱序/并发/重复运行规范。
+18. [git-and-commit-standards.md](git-and-commit-standards.md)：父仓库/submodule、分支、提交消息、合并和发布标签规范。
+19. [development-audit-2026-08-05.md](development-audit-2026-08-05.md)：方向审计、Phase 1.5 前置门禁和后续依赖调整。
 
-建议的阅读方式是先读架构确定边界，再读 tsgo 集成和支持矩阵锁定输入；实现 HIR/MIR 时以 IR 规格为唯一约束；进入 runtime 或 LLVM 阶段前，必须同时满足标准库 capability 和测试发布文档的门禁。
+建议的阅读方式是先读架构确定边界，再读 tsgo 集成和支持矩阵锁定输入；实现 HIR/MIR 时以 IR 规格和 [development-audit-2026-08-05.md](development-audit-2026-08-05.md) 的前置门禁为约束；进入 runtime 或 LLVM 阶段前，必须同时满足标准库 capability 和测试发布文档的门禁。
 
 ## 一句话方案
 
 ```text
 TypeScript source
   -> typescript-go Program + Checker
-  -> immutable typed AST snapshot
+  -> immutable lowering-complete frontend snapshot
   -> subset gate and diagnostics
   -> Bingo HIR (TypeScript semantics preserved)
   -> Bingo MIR (explicit control flow, layout, conversions, cleanup)
@@ -46,8 +48,11 @@ TypeScript source
 - 当前 `typescript-go` 的公开 API 尚未就绪，且核心包位于 `internal/`。第一阶段应维护一个薄 fork，将 `cmd/ts2bin` 和适配层放在 `github.com/microsoft/typescript-go` 模块内部。
 - checker 只能在独占借用期间访问，并且每次借用都必须调用 release；snapshot 不得持有 checker、Type 或 Signature 指针。
 - `.d.ts` 只提供编译期声明，不等于目标产物存在实现；所有运行时调用必须通过版本化 capability manifest 和 ABI 闭包检查。
+- 目标 runtime 使用 Rust 编写并按 target/profile 预编译为一个 umbrella `staticlib`，内部 crates 使用 `rlib`；LLVM 生成代码只调用版本化 `extern "C"` ABI，最终由 LLD 链接，不依赖 Rust ABI 或跨版本 bitcode。
+- 标准库采用“Rust 原语 + 受限 TypeScript 自举算法 + 可选重型引擎适配”三层结构；泛型自举代码以已验证 Bingo HIR/package 分发并按需实例化。
 - 普通 TypeScript 对象允许循环引用，general static profile 默认使用非移动 tracing GC；ARC/arena 只能作为有额外可证明约束的受限 profile。
 - `Array<T>` 的可变元素默认不变，`ReadonlyArray<T>` 和只读字段才允许协变；tsgo 的历史兼容性结果不能直接当作 Bingo 布局安全证明。
+- Phase 1.5 已形成 schema v2、wire 单一 validator、Kind shape/semantic-proof registry、target-independent `FrontendSnapshot`、canonical unresolved `BuildPlan`、checker-free replay，以及执行到 typed HIR 的 canonical production pass 前缀。`FE-008..011` 的实现、baseline 和全套 regression 已关闭；最终 patch/hash、doctor、官方 remote clean checkout full test/vet 与 WSL smoke 已通过，`FND-004a` 只剩获授权的 parent commit/HEAD clean-clone 证明。Phase 2A 先以 `ResolveTargetContext` 绑定 toolchain/runtime manifests、DataLayout 和 CapabilitySet，再进入 number-only MIR/real LLVM/object/LLD 纵切；纵切通过前，Phase 2B 和广泛语法保持 blocked。
 
 ## 交付物与唯一事实来源
 
@@ -59,6 +64,7 @@ TypeScript source
 | 每种语法具体如何转换 | `syntax-lowering-algorithms.md` | AST handler registry、求值顺序 proof、lowering golden |
 | 类型、泛型和方差如何实现 | `type-system-and-variance-algorithms.md` | Type/Rep plan、variance SCC、specialization/adapter report |
 | runtime 和 LLVM 如何落地 | `runtime-and-backend-lowering-algorithms.md` | layout/ABI manifest、root map、状态机、LLVM/object artifact |
+| runtime 用什么实现、如何安全链接 | `rust-runtime-and-linking.md` | Rust crates、C ABI schema、native archive、link response/provenance |
 | 哪些行为必须拒绝 | `unsupported-semantics-and-diagnostics.md` | diagnostic registry、boundary record、support report |
 | ES 标准库和宿主 API 是否可链接 | `stdlib-runtime-plan.md` | capability manifest、ABI hash、runtime tests |
 | 何时算完成、如何回归和发布 | `testing-conformance-and-release.md` | case manifest、差分报告、CI/reproducibility 报告 |

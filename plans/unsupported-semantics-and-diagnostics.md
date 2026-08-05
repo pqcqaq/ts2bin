@@ -380,7 +380,7 @@ message 使用稳定 key + 参数生成本地化文本；golden 主要断言 cod
 
 ## 12. 诊断稳定排序与去重
 
-同一次构建按以下 key 排序：canonical file path、start offset、end offset、diagnostic code、stable entity ID。并行 worker 只提交结构化诊断，主线程排序。
+同一次构建先按诊断层排序：tsgo diagnostics、Bingo/BINGO-UNSAFE diagnostics、LLVM diagnostics；tsgo 层内再按 configuration/syntax/binding/program/global/semantic 阶段排序。每个层和阶段内按 canonical file path、start offset、end offset、diagnostic code、stable entity ID 排序。并行 worker 只提交结构化诊断，主线程排序。
 
 去重规则：同一 code、primary span、entity/proof path 相同才去重。根因诊断可抑制直接派生的噪声，例如 unresolved capability 后不再为同一 call 报 LLVM symbol 缺失；但不能吞掉不同位置的 boundary。
 

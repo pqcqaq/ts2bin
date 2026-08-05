@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "lockFormat": "ts2bin.lock.v2",
+  "typescriptGo": {
+    "commit": "12318e599d21f516defea3b20e5d44b9369da723",
+    "upstreamCommit": "12318e599d21f516defea3b20e5d44b9369da723",
+    "forkCommit": null,
+    "forkRemote": null,
+    "reproducibilityStatus": "reproducible-patch",
+    "remote": "https://github.com/microsoft/typescript-go.git",
+    "version": "7.1.0-dev",
+    "patch": {
+      "path": "patches/typescript-go/ts2bin.patch",
+      "sha256": "759e0661a91c7b757a78106425618046dc0b8e348f2c1e31263f486c074a9c9f",
+      "baseCommit": "12318e599d21f516defea3b20e5d44b9369da723"
+    },
+    "stdlib": {
+      "root": "internal/bundled/libs",
+      "hashAlgorithm": "sha256-path-nul-content-nul-v1",
+      "sha256": "b82676463eea69ca2b7e4a6db078098999eae73b0e426cca8b8d1a7ebfc08967",
+      "fileCount": 108,
+      "totalBytes": 3785246
+    }
+  },
+  "schemas": {
+    "snapshot": 2,
+    "bingoOptions": 1,
+    "diagnostics": 1,
+    "compatibility": 1,
+    "bingoIR": 1,
+    "runtimeABI": 1
+  },
+  "toolchains": {
+    "go": "1.26.0",
+    "node": "22.22.0",
+    "npm": "11.17.0",
+    "rust": "1.97.1",
+    "llvmMajor": 20,
+    "llvmWindows": "20.1.8",
+    "lldMajor": 20,
+    "wslDistro": "Ubuntu-22.04"
+  },
+  "targets": [
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu"
+  ],
+  "profiles": [
+    "static"
+  ],
+  "defaults": {
+    "profile": "static",
+    "gc": "tracing",
+    "exceptions": "none",
+    "overflow": "js-number",
+    "boundsCheck": "on"
+  }
+}

@@ -24,15 +24,21 @@
 | 项目 | 基线 |
 | --- | --- |
 | tsgo | submodule gitlink 与 ts2bin.lock.json 中的完整 commit |
-| TypeScript 语义 | tsgo 对应的 TS 6.0 语义基线及本地实测现代语法 |
-| Bingo Snapshot/HIR/MIR | schema major 1 |
+| TypeScript 语义 | 以 `ts2bin.lock.json` 锁定的 typescript-go checkout、stdlib hash 和 `FE-007` semantic baseline 为准；版本字符串本身不证明支持 |
+| Bingo Snapshot | schema major 2，作为 Phase 1.5 snapshot-only lowering 门禁 |
+| Bingo HIR/MIR | schema major 1 |
 | runtime ABI | major 1 |
+| runtime core | 每个 target/profile/feature set 唯一 Rust umbrella `staticlib` + versioned `extern "C"` ABI；内部 crate 使用 `rlib` |
 | LLVM | major 20 |
 | 默认 profile | static |
-| 默认 GC | non-moving tracing mark-sweep |
+| 默认 GC | single-mutator stop-the-world non-moving tracing mark-sweep |
+| Phase 2A 首切异常模式 | `none`；任何可抛路径 fail closed |
+| 首个可抛异常 profile | status-code/result；native-unwind 为后续 target-specific profile |
 | 默认数值 | JavaScript number = IEEE-754 binary64 |
 | 默认字符串 | UTF-16 code unit |
 | 默认方差 | 函数参数逆变、返回协变、可写位置不变 |
+
+当前 `ts2bin.lock.json` 已记录 snapshot schema 2、no-EH 默认值和最终 patch SHA-256；compatibility/snapshot/options baseline 的有意 UTF-8 wire 变化已审查并通过回归。doctor materialized-exact、官方 remote shallow clean checkout apply/full test/vet/cleanup 与 WSL smoke 已通过；只剩获授权 parent commit/HEAD clean-clone 证明，不能用未提交工作树代替。第一条纵切使用 `exceptions=none`；`llvm-eh` 仍是明确 `unavailable` 的未来 capability，status/native-unwind 契约须在进入异常实现前单独冻结。
 
 禁止以“tsgo parser 能解析”代替“Bingo 可以生成安全本机代码”。支持级别仍使用 S0/S1/S2/C/P/R。
 
@@ -40,43 +46,75 @@
 
 ~~~text
 Compile(BuildRequest req):
-  config = NormalizeConfig(req)
-  program = Frontend.BuildProgram(config)
+  frontendConfig = NormalizeFrontendConfig(req)
+  program = Frontend.BuildProgram(frontendConfig)
   diagnostics = CollectTSDiagnostics(program)
   if diagnostics.hasError:
       return TS diagnostics
 
-  capabilitySet = LoadAndValidateCapabilities(config)
-  snapshot = CaptureProgramSnapshot(program, capabilitySet)
-  diagnostics += RunSubsetGate(snapshot, config)
+  snapshot = CaptureProgramSnapshot(program, frontendConfig)
+  frontendSnapshotKey = HashFrontendSnapshot(snapshot)
+
+  buildConfig = NormalizeBuildConfig(req)
+  buildPlan = ResolveBuildPlan(buildConfig) // defaults/canonicalization only
+  diagnostics += RunSourceSubsetGate(snapshot, buildPlan)
   if diagnostics.hasError:
       return TS/BINGO diagnostics + optional snapshot
 
-  typePlan = BuildTypeAndRepresentationPlan(snapshot)
-  if typePlan.hasUnresolvedOrUnsafe:
-      return BINGO type/representation diagnostics
+  sourceTypePlan = BuildSourceTypePlan(snapshot)
+  if sourceTypePlan.hasUnresolvedOrUnsafe:
+      return BINGO source-type diagnostics
 
-  hir = LowerSnapshotToHIR(snapshot, typePlan)
+  hir = LowerSnapshotToTypedHIR(snapshot, sourceTypePlan)
+  hir = RunSemanticDesugaring(hir)
   VerifyHIR(hir)
 
-  for pass in FixedHIRPassOrder:
-      hir = pass.Run(hir)
-      VerifyPassPostconditions(pass, hir)
+  hir = SpecializeToFixedPoint(hir)
+  ValidateVarianceAndConversions(hir)
+  VerifyHIR(hir)
 
-  mir = LowerHIRToMIR(hir, typePlan, capabilitySet)
-  VerifyMIR(mir)
+  targetContext = ResolveTargetContext(
+      buildPlan, LoadToolchainManifest(), LoadRuntimeManifest())
+  if targetContext.hasUnavailableOrIncompatibleRequest:
+      return target/toolchain/runtime diagnostics
+  capabilitySet = LoadAndValidateCapabilities(targetContext)
+  diagnostics += RunTargetCapabilityGate(hir, targetContext, capabilitySet)
+  if diagnostics.hasError:
+      return BINGO capability diagnostics
+
+  representationPlan = BuildTargetRepresentationPlan(hir, targetContext)
+  if representationPlan.hasUnrepresentableLayoutOrABI:
+      return BINGO representation diagnostics
+
+  mir = LowerHIRToCFGAndSSA(hir, representationPlan)
+  mir = LowerCleanupExceptionAndAsyncState(mir, targetContext.exceptionProfile)
+  VerifyStructuralMIR(mir)
 
   bound = BindRuntimeCapabilities(mir, capabilitySet)
   if bound.hasMissingSymbolOrABIMismatch:
       return BINGO capability diagnostics
+  bound = FreezeExactEffects(bound)
 
-  llvmModule = EmitLLVM(bound, target)
+  optimized = OptimizeProvenMIR(bound)
+  rooted = PlaceGCRootsAndFreezeCleanup(optimized, targetContext.gcProfile)
+  VerifyFinalMIR(rooted)
+
+  llvmModule = EmitLLVM(rooted, targetContext)
   VerifyLLVM(llvmModule)
   OptimizeWithLockedPipeline(llvmModule)
   VerifyLLVM(llvmModule)
 
-  artifact = EmitObjectAndLink(llvmModule, runtime, target)
-  return artifact + provenance
+  appObject = EmitObject(llvmModule, targetContext)
+  umbrellaRuntime, externalEngineArchives = SelectLockedRuntimeArtifacts(
+      rooted.capabilities, targetContext)
+  buildArtifactKey = HashBuildArtifact(
+      frontendSnapshotKey, buildPlan, targetContext, rooted.capabilities,
+      umbrellaRuntime.manifestHashes, externalEngineArchives,
+      loweringSchema)
+  artifact = LinkWithLLD(
+      appObject, selfHostedStdlibObjects, umbrellaRuntime,
+      externalEngineArchives, targetContext)
+  return artifact + provenance(frontendSnapshotKey, buildArtifactKey)
 ~~~
 
 任何失败都必须归属一个明确层：
@@ -85,7 +123,9 @@ Compile(BuildRequest req):
 | --- | --- | --- |
 | tsgo config/parser/binder/checker | TS diagnostic | 是 |
 | subset gate | BINGO unsupported/unsafe | 是 |
-| type/representation plan | BINGO unrepresentable/variance | 是 |
+| source type / variance plan | BINGO unresolved or unsafe type/variance | 是 |
+| target context resolution | target/toolchain/runtime unavailable or incompatible | 可能 |
+| target representation plan | BINGO unrepresentable layout/ABI | 是 |
 | HIR/MIR verifier | compiler bug | 否 |
 | capability binding | BINGO runtime/host capability | 是 |
 | LLVM verifier | backend bug | 否 |
@@ -95,7 +135,7 @@ Compile(BuildRequest req):
 ## 3. 每文件 snapshot 捕获算法
 
 ~~~text
-CaptureProgramSnapshot(program):
+CaptureProgramSnapshot(program, frontendConfig):
   files = program.GetSourceFiles() in canonical deterministic order
   for file in files:
       checker, release = program.GetTypeCheckerForFile(ctx, file)
@@ -107,22 +147,39 @@ CaptureProgramSnapshot(program):
 
   sort type/symbol/signature tables by stable canonical keys
   assign persistent IDs
-  hash config, sources, tsgo commit and stdlib manifest
+  hash frontend semantic config, canonical sources, tsgo commit,
+       stdlib declaration manifest and snapshot schema
   freeze all tables
   return immutable ProgramSnapshot
 ~~~
 
 CaptureFile 必须完成：
 
-- 为源节点分配 NodeId、OriginId 和 source span。
+- 为源节点分配 NodeId、OriginId 和 source span，并捕获 tagged `SyntaxPayload` 与具名 child edge。
 - 复制 symbol、resolved symbol、Type、contextual/narrowed Type、Signature 和 selected overload 信息。
 - 复制常量值、module resolution、module format、usage mode、capture set 和 checker 已求出的 flow facts。
 - 把 tsgo Type/Signature 的进程内 ID 映射为本 build 的 dense ID，再计算可持久化 canonical hash。
 - 不复制 checker 内部 FlowNode 图；MIR CFG 由 Bingo 自己构造。
 - 不保存 AST、Checker、Type、Signature、Symbol 指针。
 - release 之后不调用 TypeToString 或任何 checker API。
+- checker query 的 panic/error 必须传播到 `CaptureFile` 边界并产生不可抑制的 internal diagnostic；禁止 helper `recover` 后以 nil/false/空切片冒充“没有 type/signature/symbol/property”。
+- 捕获完成后重算 frontend config/provenance/table digest，并验证所有 semantic reference、assertion/flow proof、parent-child/root 双向关系和 node graph acyclic；任何缺失或不一致都 fail closed。
+- runtime capture set 只包含真正的 free runtime binding，并区分 read/write、mutable、`this`/`super`；type-only name 和 property key/symbol 不得污染 closure layout。
 
-snapshot 是并发边界。只有 snapshot 冻结并且所有 checker 已 release，才允许按模块或函数并行 lowering。
+snapshot 是并发边界。只有 snapshot 冻结并且所有 checker 已 release，才允许按模块或函数并行 lowering。本文的 `FrontendSnapshot` 指冻结后的完整 artifact，`ProgramSnapshot` 是它的序列化根对象；两者不是两级语义缓存，也不得拥有不同配置边界。
+
+raw `ProgramSnapshot` 只保存影响前端语义的输入和 checker 已证明的事实。target triple、CPU/features、GC、异常 profile、runtime capability、优化级别和 emit 请求不得进入 snapshot；这些字段只进入 canonical、不可变但未解析的 `BuildPlan`。`ResolveBuildPlan` 只解析默认值并规范化请求，不能据此声称目标工具链或 runtime 可用。缓存键固定为：
+
+~~~text
+FrontendSnapshotKey = hash(frontend semantic config, canonical sources,
+                           typescriptGoCommit, stdlib declaration hash,
+                           snapshot schema)
+BuildArtifactKey = hash(FrontendSnapshotKey, BuildPlan, TargetContext,
+                        lowering schema,
+                        runtime/ABI/layout hashes)
+~~~
+
+因此同一 snapshot 可以安全复用于多个 target，但任何 target、profile、layout、runtime 或 emit 变化都必须使下游 artifact cache 失效。
 
 ## 4. Subset Gate 算法
 
@@ -138,8 +195,8 @@ Gate(node):
       reject unless explicitly produced by trusted frontend adaptation
 
   switch entry.level:
-    S0: require lowering handler and representable type
-    S1: require desugaring algorithm and side-effect test
+    S0: require registered executable lowering handler and representable type
+    S1: require registered executable desugaring handler and side-effect test
     S2: require enabled runtime capability and ABI
     C:  require compile-time normalization; forbid runtime value
     P:  reject unless named experimental feature is enabled
@@ -210,22 +267,31 @@ LowerExpr(node, mode, expected):
 5. Condition 模式优先生成控制流而非 materialize bool，以保留短路和 flow facts。
 6. 每条 HIR/MIR op 保存 OriginId 与 effect。
 
-## 7. 固定 HIR Pass 顺序
+## 7. 唯一 Pass DAG 与阶段合同
 
-实现不得自行交换以下顺序：
+实现只能使用下面这条分层 DAG；语法 desugaring 内部可以按已声明依赖组成子图，但不得跨越阶段边界交换 specialization、target layout、capability binding、优化或 root placement：
 
-1. ResolveCompileOnlyTypes
-2. SpecializeGenerics
-3. ValidateVarianceAndMutability
-4. LowerAssertionsAndConversions
-5. LowerOptionalAndLogical
-6. LowerPatternsAndSpread
-7. LowerClassesAndClosures
-8. LowerIteratorsAndResources
-9. LowerExceptionsAsyncGenerators
-10. SelectLayoutsAndCallingConventions
-11. BuildCFGAndSSA
-12. VerifyMIR
+~~~text
+FrontendSnapshot
+  -> source type normalization / SourceTypePlan
+  -> typed HIR construction and semantic desugaring
+  -> generic specialization worklist to fixed point
+  -> variance/conversion validation
+  -> Phase 2A ResolveTargetContext(BuildPlan, toolchain/runtime manifests)
+  -> target RepresentationPlan: layout + calling convention
+  -> HIR-to-MIR evaluation order + CFG/SSA lowering
+  -> cleanup / exception-profile / async-state lowering
+  -> structural MIR verification
+  -> runtime capability binding and exact effect freeze
+  -> proven MIR simplification / devirtualization / escape analysis
+  -> GC root placement and cleanup freeze
+  -> final MIR verification
+  -> LLVM emission
+~~~
+
+Kind manifest 中的未来 `LoweringPlan` 文本不是 handler readiness 证明。S0/S1 只有在当前 compiler build 的 lowerer registry 已绑定 handler、声明 snapshot payload/schema 版本且存在对应 golden 时才可 accept；缺失 semantic reference 或 checker proof 是 `BINGO9000` 级内部失败，不能由 gate 跳过。
+
+specialization 使用确定性 worklist；任何 desugaring 或实例化产生的新 `InstantiationKey` 都必须继续迭代到 fixed point。`BuildPlan` 不能直接供表示规划读取；Phase 2A 必须先用锁定的 toolchain/runtime manifests 解析出 `TargetContext`。进入 target RepresentationPlan 前不得选择对象 offset、tag payload、pointer width 或 calling convention；进入 MIR 后不得残留未实例化 type parameter。structural verifier 先证明 CFG/SSA、RepType、layout 和 cleanup 结构，final verifier 再证明 bound capability、精确 effect、safepoint root 和冻结后的 cleanup。
 
 每个 pass 必须声明：
 
@@ -245,16 +311,19 @@ LowerExpr(node, mode, expected):
 | Identity | 类型和表示均兼容，无 runtime op |
 | WidenLiteral | 只丢失 literal freshness，表示不变 |
 | ReadonlyView | 只读协变 view，禁止通过目标写入 |
+| ObjectView | 保留 source object identity 的 shape/accessor/offset mapping；只读 view 可协变，可写 view 仅在读写类型、store RepType 和 aliasing 均等价时允许 |
 | NumericConvert | 明确 f64/i32/u32/float16 转换规则 |
 | TagUnion/RetagUnion | 构造或调整 tagged union |
 | CheckedCast | runtime 验证后转换 |
-| CopyAdapter | 复制到新布局/可变容器 |
+| CopyAdapter | 显式复制到新布局/容器并产生新 identity；不得伪装成 mutable structural identity conversion |
 | FunctionThunk | 参数/返回/this 调整 thunk |
-| InterfaceAdapter | 构造 shape/vtable adapter |
+| InterfaceAdapter | 构造不改变 object identity 的 interface dispatch descriptor/thunk；字段布局适配仍使用 ObjectView |
 | DynamicBoundary | 只允许 interop，记录 provenance |
 | Reject | 产生稳定诊断 |
 
 LLVM bitcast 不属于源类型转换计划，只允许 MIR verifier 已证明的等表示底层操作。
+
+structural object conversion 默认使用 `ObjectView` 或拒绝。读取通过 frozen mapping 访问原对象；写入只有在 source/target 的读类型、写类型、底层 store representation 和别名语义完全等价时才合法；identity/equality 始终比较原 source object。任何会复制字段的 adapter 都必须在源语义允许新 identity 时显式出现，不能为满足目标 layout 静默复制可变对象。
 
 ## 9. 求值顺序和 effect 不变量
 
@@ -271,7 +340,7 @@ LLVM bitcast 不属于源类型转换计划，只允许 MIR verifier 已证明�
 - module export slot 先分配，再执行初始化，支持循环依赖。
 - async/generator suspend 前保存所有活跃 local、cleanup 和 exception state。
 
-effect 集至少包含 pure/read/write/alloc/throw/suspend/dynamic/ffi/nondeterministic。优化器不能跨越未证明可交换的 effect。
+source/HIR effect 集至少包含 pure/read/write/alloc/throw/suspend/dynamic/ffi/block/nondeterministic。capability binding 冻结精确的 MayAllocate/MayThrow/MaySuspend/MayBlock/MayEnterHost；root placement 随后引入不可交换的 `RootPublication` effect。优化器不能跨越未证明可交换的 effect，LLVM 也不得删除或重排 collector 可观察的 root store、active bitmap 和 frame link/unlink。
 
 ## 10. 并发模型
 
@@ -331,26 +400,30 @@ internal/llvmbackend/
 
 ## 12. 实现顺序
 
-第一条纵切：
+`VERT-001` 是第一条真实后端纵切：
 
 ~~~text
-number literal/parameter
-  -> add function
-  -> return
-  -> snapshot
-  -> HIR/MIR
-  -> LLVM
-  -> object/link/run
+x86_64-unknown-linux-gnu add(number, number)
+  -> target-independent serialized snapshot
+  -> SourceTypePlan + typed HIR
+  -> canonical BuildPlan + 已解析的最小 TargetContext
+  -> target RepresentationPlan + verified MIR
+  -> real tinygo.org/x/go-llvm + LLVM verifier
+  -> object emission
+  -> empty startup object + one empty umbrella runtime staticlib
+  -> ld.lld + run harness + Node oracle comparison
 ~~~
 
-之后依次：
+该纵切不依赖对象、GC、EH、self-hosted stdlib、async 或第二 target。实现顺序调整为：
 
-1. primitive、local、branch、loop、direct call。
-2. union narrowing、nullish、optional/logical、patterns。
-3. object/class/closure/layout/variance。
-4. modules/generics/array/map/set/iterator/using。
-5. exception/Promise/async/generator/decorator/JSX。
-6. dynamic/FFI/ESNext 和多目标产品化。
+1. 完成 lowering-complete snapshot、snapshot-only HIR readiness 和本节 pass DAG 门禁。
+2. Phase 2A 先用锁定 toolchain/runtime manifests 实现最小 `ResolveTargetContext`，再把它接入 `number` 参数读取、加法、单 block return 的 HIR/MIR、structural/final verifier 和真实后端，完成 `VERT-001`。
+3. 在 Phase 2B 实现 local、direct call、branch/general CFG/SSA、loop、union narrowing、nullish、optional/logical 和 patterns。
+4. 冻结 `ObjectView`、object/class/closure layout 与 variance adapter，再引入 single-mutator GC v1。
+5. 实现 modules、generics、array/map/set/iterator 和 self-hosted stdlib。
+6. 先实现全链 status-code cleanup/exception，再实现 Promise/async/generator/using。
+7. 目标机桥接门禁通过后再提供可选 native-unwind profile，随后扩展第二 target。
+8. 最后推进 dynamic/FFI/ESNext、并发 GC、statepoint 和跨语言 LTO。
 
 任何阶段都先实现正例、拒绝例和 verifier，再扩大语法面。
 
@@ -361,8 +434,8 @@ number literal/parameter
 - SyntaxKind/support matrix 行。
 - snapshot 捕获字段和 stable ID。
 - subset gate 规则。
-- 类型/表示/方差转换计划。
-- HIR lowering 和固定 pass 行为。
+- source type、variance/conversion 和 target representation 计划。
+- HIR lowering 和唯一 pass DAG 的阶段行为。
 - MIR/ABI/LLVM mapping。
 - 正例、拒绝例、side-effect、golden、differential。
 - capability/target/profile 条件。

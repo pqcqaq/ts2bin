@@ -2,14 +2,16 @@
 
 本文规定 Bingo MIR 到 runtime ABI、LLVM IR、目标文件和最终二进制的实现细节。runtime 是 TypeScript 可观察语义的一部分，不是链接阶段的补丁；`.d.ts` 中存在某个 API，也不表示目标平台已经有实现。
 
+runtime core 的实现语言、crate 边界、panic/unsafe 规则、原生静态库产物和 LLD 链接算法以 [rust-runtime-and-linking.md](rust-runtime-and-linking.md) 为准。本文中的 ABI/ObjectHeader/GC/状态机是跨语言语义契约，不表示用 C 或 Go 实现 runtime。
+
 ## 1. 目标与实现边界
 
-默认产品 profile：
+计划中的首个可抛异常产品 profile 如下；Phase 2A 的 number-only 首切暂用 `exceptions=none`，不得接受任何可抛路径：
 
 ```text
 semantics = static
 gc = tracing-nonmoving
-exceptions = native-unwind
+exceptions = status-code
 strings = utf16
 number = ieee754-f64
 modules = static-graph
@@ -22,8 +24,9 @@ dynamic = disabled
 2. LLVM backend 只翻译已验证 MIR，不重新决定 overload、方差、对象 shape、异常语义或 capability。
 3. runtime ABI 只接受明确 RepType/descriptor，不能以裸 `i8*` 绕过 GC、alignment 和类型检查。
 4. 所有可能分配、抛出、挂起或进入外部代码的位置必须在 effect 和 safepoint 表中可见。
-5. target triple、data layout、calling convention、exception model 和 runtime ABI hash 在 MIR freeze 前确定。
+5. `BuildPlan` 只是 `canonical`、未解析的 backend request；Phase 2A 必须先用锁定 toolchain/runtime manifests 解析 `TargetContext`，再开始 RepresentationPlan 或 MIR。
 6. LLVM verifier 成功只是结构正确的必要条件；仍需 runtime differential、sanitizer 和目标机测试。
+7. Rust runtime 只暴露版本化 `extern "C"` ABI；Rust panic、引用、trait object 和标准库容器不得跨边界，普通失败以 status/exception handle 回到 MIR。
 
 ## 2. Runtime ABI 清单
 
@@ -48,7 +51,7 @@ Capability {
 binding 算法：
 
 1. HIR/MIR intrinsic 使用 logical name，不直接拼接链接符号。
-2. capability binding pass 解析 profile 和 target 下唯一实现。
+2. capability binding pass 只在 `TargetContext` 选定的 runtime manifest 中解析 profile 和 target 下唯一实现。
 3. 比较 RepType signature、calling convention、ownership、exception 和 GC contract。
 4. 递归闭合 `requiredFeatures`，检测环和版本冲突。
 5. 把解析后的 symbol 与 ABI hash 固化到 MIR artifact。
@@ -69,9 +72,18 @@ TaggedValue(tag, payload), StatusCode
 
 public runtime ABI 中的 boolean 用 `i8`，避免不同 C ABI 对 `i1` 的分歧。string 默认传 GC-owned `StringRef`；只读无逃逸调用可传 `Utf16View`，其 lifetime 写入签名。
 
-## 3. TargetContext
+这里的 C ABI 指调用约定和固定布局，不限定实现语言为 C。Rust 侧所有公共结构使用 `#[repr(C)]`，所有导出函数使用带 ABI major 的 `extern "C"` symbol；Rust 内部随即转换到 safe implementation。`bingo-abi` schema 是 Rust header、Go backend 描述和 LLVM layout 的单一生成来源。
 
-构建 TargetContext 时固定：
+## 3. TargetContext 解析
+
+`ResolveBuildPlan` 只做默认值解析、canonicalization、前端 hash 绑定和请求校验，不探测本机，也不证明 target/runtime 可用。Phase 2A 使用唯一入口：
+
+```text
+ResolveTargetContext(BuildPlan, ToolchainManifest, RuntimeManifest)
+    -> immutable TargetContext | target/toolchain/runtime diagnostic
+```
+
+解析必须验证 target triple、CPU/features、LLVM major、object format、data layout、runtime/ABI 版本、GC/EH profile 和所请求 feature 的兼容性；不得从 host 默认路径或临时探测结果静默补全。构建 `TargetContext` 时固定：
 
 ```text
 TargetContext {
@@ -89,10 +101,25 @@ TargetContext {
   codeModel
   optLevel
   sanitizerSet
+  toolchainManifestHash
+  runtimeManifestHash
+  abiLayoutManifestHash
 }
 ```
 
-所有 size/alignment/offset 通过 LLVM `DataLayout` 或同源布局模块计算，禁止手写假定 64 位。snapshot cache 可与 target 无关，RepType layout、MIR 和 object cache 必须包含 TargetContext hash。
+所有 size/alignment/offset 通过 LLVM `DataLayout` 或同源布局模块计算，禁止手写假定 64 位。raw frontend snapshot cache 与 target 无关；`BuildPlan` 冻结请求，`TargetContext` 冻结已解析实现。`RepresentationPlan`、RepType layout、MIR、LLVM 和 object emission 只能读取 `TargetContext`，其 cache 必须包含 TargetContext hash；解析失败时不得生成占位 layout 或 MIR。
+
+缓存键分层且不可互换：
+
+```text
+FrontendSnapshotKey = hash(frontend semantic config, canonical sources,
+                           typescriptGoCommit, stdlib declaration hash,
+                           snapshot schema)
+BuildArtifactKey = hash(FrontendSnapshotKey, BuildPlan, TargetContext,
+                        runtime/ABI/layout/lowering hashes)
+```
+
+因此换 target、CPU/features、GC、异常 profile、runtime capability、优化或 emit 选项只能失效下游 artifact，不能错误复用另一个 target 的布局或对象。
 
 ## 4. 核心内存布局
 
@@ -147,6 +174,17 @@ ObjectObject {
 data field 使用固定 offset；optional property 单独使用 presence bit。读取缺失 property 返回 `undefined`，不能读取未初始化 payload。写引用字段执行 write barrier。getter/setter 不占 data field，访问 lower 为绑定 receiver 的调用。
 
 ShapeDescriptor 至少记录 property key、kind、offset/presence bit、mutability、method/accessor slot 和 enumeration order。字段 offset 可以按稳定 layout 规则安排，但可观察的 property enumeration 必须单独遵守 ECMAScript 顺序：整数 index key 升序、其他 string key 按插入顺序、symbol key 按插入顺序。static shape 冻结后不允许增删字段；dynamic shape 是单独 runtime 类型。
+
+结构化对象跨布局使用显式 `ObjectView` RepType 或拒绝：
+
+```text
+ObjectView {
+  source       GcRef<ObjectObject>
+  viewDesc     *ObjectViewDescriptor   # frozen, non-GC metadata
+}
+```
+
+`viewDesc` 保存 source/target property 的 offset、presence、accessor 和 read/write mapping；trace 只追踪 `source`，不追踪 descriptor。只读 view 可以协变。可写 view 只有在读写类型、store RepType 和 aliasing 均等价时才允许；任何隐式复制都会产生新 object identity，不能作为 identity conversion。`ObjectView` 的 identity/equality 必须比较 source object，getter/setter 仍按绑定 source receiver 调用。
 
 ### 4.4 Class、vtable 与 private field
 
@@ -233,16 +271,18 @@ DynamicValue { tag u32, flags u32, payload [16]byte }
 
 ### 5.1 首版选择
 
-使用 stop-the-world、非移动、精确 mark-sweep：
+GC v1 使用 single-mutator、stop-the-world、非移动、精确 mark-sweep：
 
 1. 分配器从 size class/free list 获取对齐块并写 ObjectHeader。
-2. 到达阈值或显式 safepoint 时暂停 mutator。
+2. 到达阈值或显式 safepoint 时，由唯一 mutator 停在已发布 roots 的状态。
 3. 从 globals、TLS、shadow stack、async/generator frames 和 runtime handles 枚举 roots。
 4. 按 TypeDescriptor pointer map/trace callback 标记。
 5. 处理 weak reference 和 finalization queue。
 6. sweep 未标记对象，清 mark bit，恢复 mutator。
 
-非移动策略简化首版本机指针和 FFI，但不允许丢失 root。后续引入移动/并发 GC 属于 ABI 与 verifier 变更。
+非移动策略简化首版本机指针和 FFI，但不允许丢失 root。首版每个 runtime instance 只能注册一个拥有 Bingo heap 的 mutator thread；runtime service thread 只能投递消息或处理不触碰 Bingo heap 的 host 数据，不能并发读写 heap、直接执行 TypeScript callback 或自行触发 collection。跨线程 host callback 必须排队回到 owning mutator；`SharedArrayBuffer`/`Atomics` 和第二 mutator 在该 profile 中稳定拒绝。后续引入第二 mutator、移动/并发/增量 GC 都属于新的 ABI、effect 和 verifier profile。
+
+Rust runtime 内部以不透明 `Gc<T>` 表示 Bingo heap handle，但 `Gc<T>` 本身不是 root，也不得提供可跨 safepoint 保存的无约束 Rust 引用。跨 MayAllocate/MaySuspend/MayBlock/host call 的值必须进入编译器生成的 root slot 或 runtime `Root<T>`；Bingo heap object 不由 Rust `Drop` 释放。Rust `Box`/`Arc` 只用于非 GC runtime 元数据。
 
 ### 5.2 Shadow stack root
 
@@ -250,13 +290,16 @@ DynamicValue { tag u32, flags u32, payload [16]byte }
 
 ```text
 GcFrame {
-  previous  *GcFrame
-  map       *GcFrameMap
-  slots     []*ObjectHeader
+  previous    *GcFrame
+  map         *GcFrameMap
+  activeBits  []usize
+  slots       []*ObjectHeader
 }
 ```
 
-函数 prologue 注册 frame，epilogue 和所有 unwind cleanup 注销。MIR root placement pass 在每个 safepoint 前计算活跃 GcRef，将其 store 到 slot；safepoint 后 reload。phi/SSA 中的引用也必须 materialize，不能只存在寄存器。
+`GcFrameMap` 是静态 slot 类型/trace schema，`activeBits` 是当前 safepoint 的精确活跃集合。函数 prologue 注册 frame，所有普通返回、status cleanup 和可选 unwind cleanup 都必须注销。MIR root placement pass 在每个 safepoint 前计算活跃 GcRef，将其 store 到 slot，再发布 active bitmap；死亡 slot 必须清为 null，或在发布前由 active bitmap 排除。collector 只扫描已发布的 active slot，不能把旧指针当作保守 root。safepoint 后 reload；phi/SSA 中的引用也必须 materialize，不能只存在寄存器。
+
+root slot store、dead-slot clear、active bitmap publication 和 frame link/unlink 是优化器可见且有序的 `RootPublication` effect。LLVM emission 必须让 frame 地址真实逃逸到 runtime，并以带 side effect 的 ABI call/intrinsic 建立 compiler barrier；不得依赖注释、debug metadata 或仅在优化前存在的 store。任何 pass 都不得把 root store 移到 safepoint 后、把 dead-slot clear 移到 publication 前，或 DCE 掉 collector 可观察的 frame 更新。
 
 优化后可增加 LLVM `gc.statepoint`/stack map backend，但必须与 shadow-stack 实现做 differential，且不可改变语言语义。
 
@@ -268,10 +311,12 @@ GcFrame {
 - 可能分配的 direct/indirect/extern call。
 - loop backedge 的 profile-controlled poll。
 - await/yield suspend 前。
-- throw/unwind 进入 runtime 前。
+- throw/status 传播以及可选 unwind shim 进入 runtime 前。
 - blocking host call 前后。
 
 MIR effect 系统必须标记 `MayAllocate`。backend 若发现可能分配的 call 前活跃 GcRef 未 root，直接 verifier error。
+
+root audit 同时作用于最终 MIR 和优化后的 LLVM：每个 safepoint 都要能反查实际 slot store、active bit、reload 和 cleanup。GC 测试在 O0/O2 下强制每个可分配点触发 collection，并覆盖 live/dead slot 交替、phi、loop、status return、throw、callback 和 suspend；只验证优化前 root map 不构成发布门禁。
 
 ### 5.4 Write barrier
 
@@ -382,20 +427,22 @@ ExceptionCarrier {
 
 TypeScript 允许 throw 任意值；static profile 的可抛值必须可装入封闭 TaggedValue，其他需要 dynamic exception capability。catch variable 默认 `unknown`，使用前必须收窄。
 
-### 8.3 LLVM EH lowering
+### 8.3 Status-code 基线与可选 Native Unwind
 
-backend 根据 target 选择：
+MIR 只表示平台无关的 normal/exception successor、cleanup region 和 exception carrier ownership。第一个可执行 profile 固定为全链 status-code/result lowering：MayThrow 函数通过 `StatusCode` 加 out-result/exception handle 返回；调用点按 status 分支到 normal 或 exception successor；cleanup dispatcher 显式执行 `finally`、resource dispose、root frame 注销和 handle release。该 profile 的生成函数和 Rust helper 都是 `nounwind`，LLVM module 不需要 personality、landingpad 或 funclet。
 
-- Itanium/DWARF EH（Linux/macOS 等）：`invoke`、`landingpad`、personality、`resume`。
-- Windows MSVC EH：`invoke`、`catchswitch`、`catchpad`、`cleanuppad`、`cleanupret`。
+native-unwind 是后续 target-specific profile，只有 bridge contract 通过目标机门禁后才启用：
 
-MIR 不暴露 landingpad 细节，只表示 normal/unwind successor 和 cleanup region。EH lowering 必须保证 shadow-stack frame 注销、runtime handle release 和 finally 在所有 unwind path 执行。
+- Itanium/DWARF EH（Linux/macOS 等）使用已锁定 personality、`invoke`、`landingpad`、`resume` 和 throw/rethrow shim。
+- Windows MSVC EH 使用已锁定 personality、`invoke`、`catchswitch`、`catchpad`、`cleanuppad`、`cleanupret` 和对应 throw/rethrow shim。
+- 只有极薄平台 shim 可以把已 root 的 Bingo `ExceptionCarrier` 转移给 native unwind；普通 Rust frame/helper 仍保持 `nounwind` status ABI。
+- profile 必须定义 carrier 分配/释放和 rethrow ownership、foreign exception 拒绝或转换策略、uncaught boundary、shadow-stack cleanup 以及必需的平台链接库。
 
-不得用 `setjmp/longjmp` 作为默认异常实现：它会绕过 LLVM cleanup、破坏 root 生命周期和优化假设。Wasm/无 unwind target 需要单独的 result/status-code lowering profile，不能与 native-unwind 对象混链。
+status-code 与 native-unwind 的 function ABI、object note、umbrella runtime 和 startup object 必须全链一致，不能混链。不得使用 `setjmp/longjmp`：它会绕过 cleanup、root 生命周期和 LLVM 优化约束。无 native unwind 的 target 继续使用同一 status-code 基线，而不是另造隐式异常语义。
 
 ### 8.4 noexcept 与 effect
 
-只有 MIR effect 证明 `NoThrow` 的 call 才发普通 `call` 并省略 unwind edge。runtime manifest 标记 MayThrow 的 helper 必须使用 `invoke` 或在调用 ABI 内显式返回 status。优化不得把有可观察 cleanup 的 throw path 当作 unreachable。
+只有 MIR effect 证明 `NoThrow` 的 call 才能省略 exception successor。status-code profile 中 MayThrow helper 必须检查显式 status；native-unwind profile 中可启动 unwind 的平台 shim 必须使用 `invoke`。优化不得把有可观察 cleanup 的 throw path 当作 unreachable。
 
 ## 9. Promise 与 microtask runtime
 
@@ -428,7 +475,7 @@ resolve 执行 thenable assimilation，需要 self-resolution 检查和 once gua
 
 ### 9.3 Async iteration
 
-`for await` 先获取 async iterator；允许 sync iterator adapter 时显式 capability 包装。每次 next、value await、body、IteratorClose 都有 reject/unwind 边。break/return/throw 必须 await async `return()` 完成后再离开。
+`for await` 先获取 async iterator；允许 sync iterator adapter 时显式 capability 包装。每次 next、value await、body、IteratorClose 都有 reject/exception 边。break/return/throw 必须 await async `return()` 完成后再离开。
 
 ## 10. Generator 状态机
 
@@ -461,6 +508,8 @@ Generator frame 保存 `SuspendedStart/Executing/SuspendedYield/Completed`、loc
 5. 显式 host/interop adapter。
 
 选择 intrinsic 前必须证明边界语义：NaN、负零、溢出、UTF-16、SameValueZero、property enumeration order、异常和 callback effect。证明不足就调用 runtime，不以性能为由改变行为。
+
+具体实现可落在三类 artifact：LLVM/MIR intrinsic、Rust native runtime capability、self-hosted TypeScript stdlib function。self-hosted 函数进入普通 HIR/MIR verifier；泛型函数按 InstantiationKey 单态化或使用 descriptor-shared ABI，不能要求 umbrella runtime archive 穷举用户类型。
 
 ## 13. Host FFI
 
@@ -522,11 +571,11 @@ strict equality 按类型分派：f64 遵循 NaN/zero，string 比 code units，
 
 ### 15.5 Call
 
-direct call 使用冻结 LLVM FunctionType 和 calling convention。closure call 传隐藏 env；method call 传 receiver；descriptor-shared generic 传隐藏 descriptor。可能 throw 用 invoke，可能 allocate 前 spill roots。tail call 只有 cleanup stack 为空、ABI 相同且没有活跃 root frame 特殊要求时允许。
+direct call 使用冻结 LLVM FunctionType 和 calling convention。closure call 传隐藏 env；method call 传 receiver；descriptor-shared generic 传隐藏 descriptor。status-code profile 的 MayThrow call 返回 status 并显式分支；只有 native-unwind profile 的已审计平台 shim 使用 `invoke`。MayAllocate 前发布 roots。tail call 只有 cleanup stack 为空、ABI 相同且没有活跃 root frame 特殊要求时允许。
 
 ## 16. 检查与失败路径
 
-null、bounds、tag、class cast、integer index、capability guard 统一 lower 为：condition -> likely success block / cold failure block。failure block 调用具名 `noreturn` runtime helper 并以 unreachable 结束，或在 status-code profile 返回失败。
+null、bounds、tag、class cast、integer index、capability guard 统一 lower 为：condition -> likely success block / cold failure block。status-code 基线在 failure block 构造结构化 status/exception carrier 并跳到 exception successor；native-unwind profile 才可调用具名 throw shim 并以 `unreachable` 结束。真正 process-fatal 的 trap/OOM policy 必须使用不同 capability，不能冒充语言异常。
 
 检查消除只能使用 MIR proof：支配范围内已检查、loop range proof、sealed layout、non-null flow。LLVM 优化推导不能反向改变 Bingo diagnostic 或异常种类。
 
@@ -545,32 +594,40 @@ null、bounds、tag、class cast、integer index、capability guard 统一 lower
 固定顺序建议：
 
 ```text
-HIR semantic lowering
--> MIR verifier
--> checked local simplification
--> specialization / devirtualization
+source type normalization
+-> typed HIR + semantic desugaring
+-> specialization worklist to fixed point
+-> variance/conversion validation
+-> ResolveTargetContext(BuildPlan, toolchain/runtime manifests)
+-> target representation/layout selection
+-> MIR CFG/SSA + cleanup/exception/async lowering
+-> structural MIR verifier
+-> capability binding and exact effect freeze
+-> checked local simplification / devirtualization
 -> escape analysis (optional stack promotion)
 -> bounds/null check elimination with proofs
 -> root placement and cleanup freeze
--> capability binding
+-> final MIR verifier
 -> LLVM emission
 -> LLVM verifier
 -> conservative LLVM optimization pipeline
 -> post-opt LLVM verifier
+-> post-opt safepoint/root publication audit
 -> object emission
 ```
 
-root placement 后不得运行会引入新 safepoint 或隐藏引用 lifetime 的自定义 MIR pass。LLVM pass pipeline 首版禁用不符合 JS number 语义的 fast-math；每次 LLVM 升级做 IR、object 和 differential 审计。
+specialization 必须在 target layout 和 MIR 前达到 fixed point；`ResolveTargetContext` 必须在 RepresentationPlan/MIR 前成功，后续 target-dependent pass 不得回读未解析 `BuildPlan`。capability binding 必须在 MIR 优化前冻结准确 effect，否则优化器无法证明 safepoint 和 throw 边界。root placement 后不得运行会引入新 safepoint 或隐藏引用 lifetime 的自定义 MIR pass。LLVM pass pipeline 首版禁用不符合 JS number 语义的 fast-math，并必须保留 `RootPublication` 的 side effect/ordering；每次 LLVM 升级做 IR、root publication、object 和 differential 审计。
 
 ## 19. 目标文件与链接
 
 1. 创建 LLVM TargetMachine，核对 module triple/data layout。
 2. 发射 object 而非把文本 IR 当最终产物。
-3. 链接 Bingo runtime、module objects、显式 host libraries 和启动 shim。
-4. 启动 shim 初始化 GC、scheduler、module registry，再执行 entry module。
-5. 链接后检查 capability symbol closure、ABI note/hash 和重复 runtime version。
-6. 产物嵌入 build manifest：source hash、tsgo commit、IR schema、LLVM version、target、profile、runtime hash。
-7. 可复现构建要求稳定 module order、symbol naming、timestamp policy 和 debug path remap。
+3. 根据 bound MIR intrinsic 计算 capability 闭包，选择 target/profile/feature/ABI hash 匹配的唯一预构建 Rust umbrella `staticlib`；首版不把 Rust bitcode 或跨语言 LTO 当作发布契约。
+4. 链接 startup object、module/self-hosted stdlib objects、该 umbrella archive、manifest 明确的可选外部引擎 archives 和显式 host libraries。
+5. 启动 shim 初始化 GC、scheduler、module registry，再执行 entry module。
+6. 通过确定性 response file 调用目标 LLD driver，并检查 capability symbol closure、ABI note/hash 和重复 runtime version。
+7. 产物嵌入 build manifest：source hash、tsgo commit、IR schema、LLVM version、target、profile、rustc/Cargo features、umbrella/external artifact hashes 和 LLD version。
+8. 可复现构建要求稳定 module/archive order、symbol naming、timestamp policy 和 debug path remap。
 
 不支持的 native library、target feature 或 linker 行为必须在构建配置阶段报错。
 
@@ -579,7 +636,7 @@ root placement 后不得运行会引入新 safepoint 或隐藏引用 lifetime �
 LLVM emission 前检查：
 
 - 所有 MIR value 有确定 RepType，所有 LayoutId 已冻结。
-- CFG、phi、dominance、cleanup 和 unwind edge 完整。
+- CFG、phi、dominance、cleanup 和平台无关的 exception edge 完整。
 - 每个 MayAllocate safepoint 的活跃 GcRef 已 root。
 - 每个引用 store 有合法 barrier 策略。
 - indirect call 的 AbiSignatureId 已验证。
@@ -591,9 +648,10 @@ LLVM emission 后检查：
 
 - `LLVMVerifyModule` 在优化前后都成功。
 - module triple/data layout 与 TargetMachine 一致。
-- personality、landingpad/funclet 结构符合 target EH。
+- status-code profile 没有意外 personality/unwind edge；native-unwind profile 的 personality、landingpad/funclet 和 shim 结构符合 target contract。
 - ABI/public struct layout 与 manifest 计算一致。
 - 没有 unresolved runtime symbol、非法 address-space cast 或意外 external declaration。
+- 唯一 Rust umbrella archive 的 target、panic、GC、exception、ABI major、capability 和 layout notes 与构建请求一致；外部引擎 archive 只能来自 manifest 闭包。
 
 ## 21. 失败原子性和编译并发
 
@@ -602,19 +660,20 @@ LLVM emission 后检查：
 - linking 使用稳定 ModuleId 排序。
 - 某 module 失败时不发布半成品 object/cache entry。
 - runtime manifest 和 target context immutable，可并发读取。
-- compiler crash 时保留最小复现所需的 snapshot/MIR hash和阶段，不自动发布包含绝对用户路径的 artifact。
+- compiler crash 时保留最小复现所需的 snapshot/MIR hash 和阶段，不自动发布包含绝对用户路径的 artifact。
 
 ## 22. 最低验证矩阵
 
 | 层 | 必须验证 |
 | --- | --- |
 | layout | 32/64 位 size/alignment、optional bit、inheritance、private slot、tag table |
+| object/view | cross-layout read、accessor receiver、identity/equality、mutable alias write、implicit-copy rejection |
 | string | surrogate、空串、拼接溢出、index/slice、UTF-8 FFI roundtrip |
 | array | bounds、扩容、reference barrier、readonly view、dense/sparse 拒绝 |
 | closure | by-value/by-cell、recursive capture、receiver、escape、indirect ABI |
-| GC | deep graph、cycle、root across call/throw/await、weak ref、OOM path |
+| GC | single-mutator/second-mutator rejection、deep graph、cycle、O0/O2 active-root audit、dead-slot、root across call/throw/await、weak ref、OOM path |
 | module | SCC、live binding、TDZ、一次初始化、失败缓存、top-level await |
-| EH/cleanup | return/throw/finally 覆盖、nested using、Windows/Itanium unwind |
+| EH/cleanup | status-code return/throw/finally、nested using、profile 混链拒绝；后续 Windows/Itanium native unwind |
 | async | sync prefix、multiple await、reject、finally、microtask order |
 | generator | next/throw/return、yield*、close、reentrancy、async queue |
 | LLVM | pre/post verify、debug line、target object、link closure、ABI hash |
@@ -624,12 +683,15 @@ runtime 行为使用 Node/规范 oracle 做 differential；不应依赖 Node 的
 
 ## 23. 实施顺序
 
-1. 固定 TargetContext、ABI schema、primitive/string/object header 和 capability resolver。
-2. 实现 MIR CFG、direct call、checks、shadow-stack root 和最小 mark-sweep runtime。
-3. 实现 fixed object/array/closure/class layout 与 module SCC 初始化。
-4. 实现 cleanup region、native EH、using 和 exception carrier。
-5. 实现 iterator、Promise/microtask、async/generator frame。
-6. 实现 host FFI、dynamic profile、weak/finalization 和高级标准库能力。
-7. 最后才开启高级 LLVM 优化、statepoint、跨模块优化和更多 target。
+1. Phase 2A 先用锁定 toolchain/runtime manifests 实现 `ResolveTargetContext`，并固定首切所需的最小 `bingo-abi`、唯一空 umbrella `staticlib` 和 deterministic response file。
+2. 完成 `VERT-001`：`x86_64-unknown-linux-gnu` 的 `add(number, number)` 经过 target-independent snapshot、已解析 TargetContext、verified HIR/MIR、真实 go-llvm、LLVM verifier、object emission、空 startup/umbrella runtime、LLD 和 run harness；不引入对象、GC 或 EH。
+3. 实现 MIR checks、`ObjectView`/fixed object/array/closure layout、single-mutator shadow-stack root 和最小 mark-sweep runtime，并通过 O0/O2 root audit。
+4. 实现 self-hosted stdlib package、module SCC 初始化、generic specialization 与 iterator。
+5. 实现全链 status-code cleanup、using 和 exception carrier；Rust helper 保持显式 status，panic 不表达语言异常。
+6. 实现 Promise/microtask、async/generator frame。
+7. Linux/Windows 各自 bridge contract 和目标机测试通过后，再提供可选 native-unwind profile。
+8. 实现 host FFI、dynamic profile、weak/finalization 和高级标准库能力。
+9. core 稳定后将 ABI/memory/core crates 收敛到 `no_std + alloc`。
+10. 最后才开启高级 LLVM 优化、statepoint、并发 GC、跨模块优化、可选跨语言 LTO 和更多 target。
 
 每一步的支持开关、拒绝策略和诊断必须先于 capability 对用户可见；详细规则见 [unsupported-semantics-and-diagnostics.md](unsupported-semantics-and-diagnostics.md)。

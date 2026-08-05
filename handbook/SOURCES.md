@@ -13,7 +13,7 @@
 
 整理时使用的官方仓库提交为 `c8170c35bda4811c9516cbb69c39241ae4beb6d9`，提交时间为 2026-07-06。npm registry 在 2026-08-03 返回的 TypeScript 稳定版为 7.0.2。
 
-ECMAScript 标准库以用户本地 `typescript-go` 仓库提交 `5b1047d10`（2026-07-31）的 `internal/bundled/libs/` 为依据。`handbook/stdlib/99-api-index.md` 由 AST 脚本直接从这些 `.d.ts` 生成，并排除了 DOM、WebWorker 与 ScriptHost 宿主 API。
+当前 `handbook/stdlib/99-api-index.md` 最初由 `typescript-go` 提交 `5b1047d10`（2026-07-31）的 `internal/bundled/libs/` 生成，并排除了 DOM、WebWorker 与 ScriptHost 宿主 API。编译器当前锁已前移到 `12318e599d21f516defea3b20e5d44b9369da723`（`7.1.0-dev`）；因此该手册索引只能作为历史资料，发布/coverage 必须以 `ts2bin.lock.json` 的 stdlib hash 和 `FE-007`/`RT-001` 重新生成的 manifest 为准。
 
 ## 收录原则
 

@@ -35,7 +35,15 @@
 - 错误断言检查稳定的 error type/code 和关键字段，不依赖完整英文文案，除非测试对象就是诊断格式。
 - panic 只用于验证明确声明的 programmer error；普通用户输入必须返回诊断或 error。
 
-### 2.2 测试工具包
+### 2.2 Rust Runtime 测试
+
+- 默认使用 Rust 内置 test harness；跨 ABI 测试必须从生成的 C header 或 LLVM caller 调用导出符号，不能只覆盖 crate 私有 API。
+- `cargo fmt --check`、锁定 clippy/lint、crate tests 和 target staticlib smoke link 属于 runtime 基线门禁。
+- `unsafe`、GC handle 和 layout 测试按 [rust-runtime-and-linking.md](rust-runtime-and-linking.md) 使用 Miri、sanitizer、fuzz 和真实目标机的组合，不能用某一个工具的通过代替全部安全契约。
+- 每个测试使用独立 heap/root stack/scheduler 和临时 Cargo target dir；禁止依赖另一个测试留下的 archive、incremental cache 或全局 allocator 状态。
+- Rust panic 只用于 runtime 内部不变量测试；导出 ABI 对用户输入必须返回 status/exception，release `panic=abort` 路径不得用 `catch_unwind` 掩盖。
+
+### 2.3 测试工具包
 
 共享测试工具放在 internal/testkit 下，但只有满足 [coding-and-maintainability-standards.md](coding-and-maintainability-standards.md) 的抽象条件才创建。建议边界：
 
@@ -196,6 +204,11 @@ func TestSnapshotRejectsEscapedCheckerPointers(t *testing.T) {
 - GC 测试显式注册 root，结束时验证无悬挂任务和预期对象可达性。
 - Promise/async 测试使用确定性 scheduler，不能依赖 sleep 等待。
 - Map/Set/string/TypedArray 测试固定 locale、timezone、encoding 和数据版本。
+- Rust 导出 ABI 测试必须检查 symbol、signature、`repr(C)` size/alignment/offset、null/invalid handle 和 status 转换；不得只从 Rust 内部调用 safe worker。
+- Rust `unsafe` 核心在可用范围内运行 Miri；GC raw heap、外部 engine 和平台 shim 使用 sanitizer/目标机测试补足 Miri 无法覆盖的路径。
+- release `panic=abort` 构建必须证明普通输入和负例返回 status/exception；测试不得用 `catch_unwind` 把 ABI panic 当作合法错误策略。
+- 每个 runtime archive 测试独占临时 target dir，不能共享 Cargo output 后再用时间戳判断产物；可复现测试比较规范化 archive/member/manifest digest。
+- self-hosted stdlib 测试从锁定 HIR/package 独立实例化，不能读取上一个 case 生成的 specialization cache。
 
 ### 7.4 LLVM/backend
 
@@ -203,6 +216,7 @@ func TestSnapshotRejectsEscapedCheckerPointers(t *testing.T) {
 - 输出进入 t.TempDir，target triple/data layout/LLVM major 写入 artifact header。
 - VerifyModule 失败视为测试失败和编译器 bug，不能转成普通用户诊断。
 - 缺少 LLVM 工具时只允许 capability-aware skip；发布 CI 的必需 job 不得 skip。
+- link 测试必须使用锁定 LLD 和显式 response file，验证 Rust archive target/ABI/Cargo feature/capability 不匹配会在链接前产生结构化诊断。
 
 ### 7.5 Differential
 

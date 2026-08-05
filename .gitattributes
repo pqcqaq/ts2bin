@@ -1,0 +1,2 @@
+patches/typescript-go/*.patch binary
+*.sh text eol=lf

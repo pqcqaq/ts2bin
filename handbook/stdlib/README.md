@@ -1,6 +1,6 @@
 # ECMAScript 标准库
 
-本目录基于本地 `typescript-go/internal/bundled/libs/` 的 ES5、ES2015–ES2025 与 ESNext 声明整理，参考仓库提交 `5b1047d10`（2026-07-31）。
+本目录基于本地 `typescript-go/internal/bundled/libs/` 的 ES5、ES2015–ES2025 与 ESNext 声明整理；当前内容最初参考提交 `5b1047d10`（2026-07-31）。编译器锁现为 `12318e599d21f516defea3b20e5d44b9369da723`（`7.1.0-dev`），所以实现与发布覆盖以 lock 中的 stdlib hash 和重新生成的 capability manifest 为准，不能把本目录的历史索引当作当前锁的证明。
 
 ## 先理解 `lib`
 

@@ -146,3 +146,115 @@
 - 新增 `plans/unsupported-semantics-and-diagnostics.md`，规定 static/interop/unsafe 边界、必须拒绝的动态行为、capability/target 失败、稳定诊断和新能力准入门禁。
 - 更新 plans 总导航、六阶段路线图和 lowering 细则交叉引用，使实现代码能够从总规格进入并定位唯一算法契约。
 - 一致性审计修正旧 `setjmp` EH 建议、模块 import 顺序和 optional/indexed read-write 类型规则；18 份 plans 文档的本地链接、围栏、占位词、行尾空白和 `git diff --check` 均通过，typescript-go submodule 保持干净。
+
+## 2026-08-04 Rust runtime 架构决策
+
+- 用户决定使用 Rust 编写 `bingo-rt` core，并在编译末端静态链接；旧的 Go/C/LLVM runtime 泛化表述被正式收敛。
+- 新增 `plans/rust-runtime-and-linking.md`，固定 Rust workspace、`repr(C)`/`extern "C"` ABI、safe/unsafe 边界、`Gc/Root`、panic/status、`std -> no_std + alloc` 路线、native static archives 和 LLD 链接算法。
+- 更新总体架构、编译主算法、runtime/backend、stdlib、路线图、backlog、测试、开发流程、维护和 Git 规范，使 Rust toolchain、Cargo features、archive/layout/capability hash 进入门禁与 provenance。
+- 标准库明确分成 Rust 原语、self-hosted TypeScript HIR/package 和可选 external engine 三层；泛型算法不要求 Rust archive 穷举用户实例。
+- 当前只记录架构和执行契约，尚未创建 Cargo workspace、runtime 源码、archive 或 linker 实现。
+- 最终静态复核：19 份 plans 文档、6,452 行；本地链接全部存在，Markdown 围栏成对，无实际 TODO/FIXME/TBD、行尾空白或旧 Go/C runtime 实现假设，`git diff --check` 通过。
+
+## 2026-08-04 至 2026-08-05 Phase 1 Foundation 与前端实现
+
+Phase 1 的实现已落在 `typescript-go/cmd/ts2bin` 与 `typescript-go/internal/tsfrontend`。下表记录的是 2026-08-05 方向审计前，按当时 `FND-001..003`、`FE-001..007` 验收契约得到的完成状态；它证明原前端门禁通过，不代表 snapshot 已经 lowering-ready。审计后的当前状态见下一节。
+
+| ID | 状态 | 已实现内容 | 可复现验收命令（在 `typescript-go` 目录运行） |
+| --- | --- | --- | --- |
+| `FND-001` | complete | 建立 `cmd/ts2bin` 命令入口；锁定并输出 tsgo commit、TypeScript/Go、108 个 bundled lib 的哈希、LLVM 20.1.8 与 LLD 20.1.8 provenance | `go test ./internal/tsfrontend -run '^TestCanonicalBuildInfoJSONIsStableAndComplete$' -count=1`; `go test ./cmd/ts2bin -run '^TestVersionJSONContainsLockedProvenance$' -count=1`; `go run ./cmd/ts2bin version --json` |
+| `FND-002` | complete | 规范化 `bingoOptions`，提供 static/interop/unsafe profile、稳定 canonical digest、严格 TypeScript 默认值，并拒绝 dynamic、非法值和未知 JSON 字段 | `go test ./internal/tsfrontend -run '^TestNormalizeOptions' -count=1`; `go test ./internal/tsfrontend -run '^TestCheckRejectsUnknownBingoOption$' -count=1` |
+| `FND-003` | complete | 建立 TS/BINGO/BINGO-UNSAFE/LLVM 诊断 registry、pointer-free schema、稳定排序与去重 | `go test ./internal/tsfrontend -run '^TestDiagnostic' -count=1`; `go test ./internal/tsfrontend -run '^TestSortAndDeduplicateDiagnosticsUsesStableContract$' -count=1` |
+| `FE-001` | complete | 封装 tsconfig、CompilerHost、Program 与诊断采集链；`check` 返回稳定结构化诊断且不暴露 live Program/checker | `go test ./internal/tsfrontend ./cmd/ts2bin -run '^TestCheck' -count=1` |
+| `FE-002` | complete | 以 callback scope 独占借用 checker，并在正常返回、错误、panic、取消和并发路径上释放 | `go test -race ./internal/tsfrontend -run '^TestWithCheckerForFile' -count=1` |
+| `FE-003` | complete | 定义 pointer-free `ProgramSnapshot`、稳定 ID、canonical hash/JSON、完整性校验与 CLI determinism 双构建检查 | `go test ./internal/tsfrontend -run 'Deterministic' -count=1`; `go test ./cmd/ts2bin -run '^TestSnapshotVerifiesDeterminismAndWritesJSON$' -count=1`; `go test ./internal/tsfrontend -run '^TestAsyncFunctionSnapshotIsDeterministic$' -count=50` |
+| `FE-004` | complete | 捕获 node/type/signature/symbol、overload、泛型实例化、constant、flow narrowing 与 semantic digest；fixture runner 对 check/build/snapshot 期望做差分 | `go test ./internal/tsfrontend -run '^TestFrontendConformanceFixtures$' -count=1`; `go test ./internal/tsfrontend -run '^TestSnapshotCapturesGenericCallInstantiation$' -count=1` |
+| `FE-005` | complete | 生成并校验 351-row AST Kind manifest schema v2；100 个 fixture 提供 194 条真实 evidence，另有 157 条逐 Kind 精确 exemption；JSDoc/JS/JSX 节点进入稳定 snapshot | `go test ./internal/tsfrontend/kind_manifest_gen ./internal/tsfrontend -run 'Kind' -count=1`; `go test ./internal/tsfrontend -run '^TestRunSubsetGate' -count=1` |
+| `FE-006` | complete | 从 Program resolution cache 生成 canonical ModuleGraph，分类 ESM/CJS、type/value/side-effect edge、package exports 条件和 eager value SCC | `go test ./internal/tsfrontend -run 'ModuleGraph' -count=1` |
+| `FE-007` | complete | 建立 351 Kind、4,893 API、108 stdlib、100 semantic 的兼容性基线；runner 审计 checkout lock、iota/build-tag API、路径链接与原子更新 | `go test ./internal/tsfrontend ./cmd/ts2bin -run 'Compatibility' -count=1`; `go run ./cmd/ts2bin compatibility --json` |
+
+该轮最终验收在 FE-005/FE-007 冻结时执行，下列矩阵当时全部通过：
+
+```powershell
+go test ./...
+go test -race ./internal/tsfrontend ./cmd/ts2bin
+go test -shuffle=on ./...
+go test -count=20 ./internal/tsfrontend ./cmd/ts2bin
+go vet ./...
+go run ./cmd/ts2bin version --json
+go run ./cmd/ts2bin test --stage frontend --json
+go run ./cmd/ts2bin doctor --json
+go run ./cmd/ts2bin compatibility --json
+git diff --check
+git status --short
+```
+
+关键结果：targeted race 通过；全仓 shuffle 通过；`internal/tsfrontend` 与 `cmd/ts2bin` 连续 20 次通过；frontend stage 报告 `ok: true`；compatibility 报告 `compatible: true` 且 checkout expected/observed commit 闭合；doctor 的 Windows、WSL 和 revision closure 检查全部通过。该结论的准确表述是：Phase 1 原验收项 complete，lowering readiness 未审计。
+
+## 2026-08-05 开发方向与 lowering-readiness 审计（历史检查点）
+
+- 总体架构继续采用 `typescript-go -> immutable snapshot -> Bingo HIR/MIR -> LLVM -> Rust C ABI staticlib + LLD`；不改成 AST 直发 LLVM，也不引入完整 JS engine 作为 static profile 基础。
+- 阶段结论调整为 `rework before Phase 2`：Phase 1 通过原门禁，但不能据此启动广泛 `IR-001`/HIR 语法开发。
+- 新增 Phase 1.5：`FND-004`、`FE-008..011`、`IR-000`。前置工作覆盖可获取 fork/clean clone、lowering-complete snapshot v2、fail-closed checker capture、完整 snapshot verifier、property/signature/assertion/flow/capture/module proof、snapshot-only replay、路径/semantic-options/target cache 边界和唯一 pass DAG。
+- 测试审计确认当前 fixture 主要比较 diagnostic code 集和 snapshot summary，`test --stage frontend` 只跑单一 conformance test；精确 DTO/diagnostic、fresh-instance determinism、独立 manifest、Unicode/path/fuzz 和完整阶段 runner 进入 `FE-010`。
+- 新增后续设计门禁：`OBJ-000` structural object view/identity/alias/GC ABI、`GC-001` single-mutator root liveness/optimizer contract、`EH-001` status/native-unwind bridge。
+- 把 real LLVM 反馈前移为 `RT-002` + `BE-001/002/004a` + `REL-001` + `VERT-001` + `REL-002a`：先由统一 case runner 在 Linux x86-64 编译并运行无对象/GC/EH/字符串的 `add(number, number)`，再扩展 runtime 和第二目标。
+- 审计中已修复 CLI profile override 丢失其余 `bingoOptions`，并为 assertion snapshot 增加单步 target/assignability proof；相关定向测试通过。这些只是局部修复，不能替代 Phase 1.5。
+- assertion proof 曾产生 3 个预期 semantic digest 差异；现已完成 schema v2 迁移、人工分类与 baseline 更新，`go test ./internal/tsfrontend -count=1` 通过。这只证明当前 baseline 一致，不代表 Phase 1.5 已闭合。
+- 完整结论、证据和调整后的依赖链见 `plans/development-audit-2026-08-05.md` 与 `plans/implementation-backlog.md`。
+
+## 2026-08-05 Phase 1.5 收口与计划重排（历史检查点，已被二次审计取代）
+
+- `FE-008` 实现进展：snapshot schema v2、tagged payload、source blob、named children、通用图/hash validator 和 fail-closed capture 已落地。反向审计仍发现 validator 接受 NumericLiteral 空 Text 与 BinaryExpression 全 generic `child[n]` roles，因此状态回调为 partial，下一步补 Kind shape registry。
+- `FE-009` 实现进展：property/parameter/signature/effect、assertion/non-null/flow/capture/module facts 已进入 snapshot semantic hash。仍缺 per-specifier module binding、checker/callee-derived effect proof 与按 Kind/lowerer mandatory-fact validation，因此状态为 partial。
+- `FE-010` 实现进展：真实序列化 `add(number, number)` replay、11-Kind readiness registry、多 return/未绑定 Kind/非 number/坏 symbol/type 拒绝已通过。consumer 仍位于 `internal/tsfrontend`，events 仍按 source position，尚无独立新进程/CFG evaluation-order 证明，因此仅为 primitive prototype。
+- `FE-011` 实现进展：`FrontendSnapshot` wrapper 与 BuildPlan provenance split、投影后 hash、case-sensitive path/profile tests 已落地。raw ProgramSnapshot 仍随 target/CPU/emit 变化，BuildPlan 接受任意格式正确 digest，且遗漏三个 TS options，因此状态为 partial。
+- compatibility 夹具读取器和 semantic digest domain 已迁移到 schema v2；执行 `go run ./cmd/ts2bin compatibility --update-baseline` 后，`go test ./internal/tsfrontend -count=1` 通过。
+- `FND-004` 实现进展：已生成 patch，lock 固定 upstream/base/path/SHA-256，doctor 报告 `materialized-exact`；一次隔离 remote apply/test/vet 通过，最新 shallow smoke/long-path cleanup 也 exit 0。但 parent HEAD 的 gitlink 仍是旧 commit，lock/scripts/patch 未进入 parent HEAD，因此 acceptance blocked。
+- `IR-000` 审计结论为 metadata skeleton：已有不可变 13-stage pass metadata/sequence contract 与初步 HIR verifier；overlay 仍证明无返回自循环、非法 store/phi/sparse ID 和 MIR duplicate FunctionID 可被接受。
+- 后续顺序调整为：FND clean-parent delivery -> FE Kind shape registry -> mandatory semantic facts/per-specifier/effect proof -> source-level target split/typed BuildPlan -> 独立 checker-free CFG replay -> pass executor -> primitive IR chain（含 HIR/MIR verifier closure） -> empty runtime/startup -> real LLVM/object/link -> case runner -> `VERT-001` -> Node differential。对象、GC、EH、async、模块和广泛语法继续延后。
+
+反向 overlay 证据（2026-08-05）：frontend overlay 的 4 个漏洞断言全部 PASS，分别暴露 Kind payload/role、BuildPlan 伪 digest、TS option projection 和 raw target-dependent hash 问题；IR overlay 的 5 个 verifier 漏洞断言全部 PASS，暴露无 return CFG、非法 store/entry phi、sparse ID 与重复 MIR FunctionID。replay overlay 的 exactly-one-return 旧漏洞断言 FAIL（修复有效），raw backend-dependent hash 断言仍 PASS（FE-011 未闭合）。因此常规 `go test` 全绿既不能关闭 Phase 1.5 入口，也不能关闭其后的 primitive vertical slice；两道门按各自依赖验收。
+
+本轮定向验证：
+
+```powershell
+go test ./internal/bingo -count=1
+go test ./internal/tsfrontend -count=1
+go test ./internal/tsfrontend -run 'Replay|LowererReadiness|VerifyHIR|CanonicalHash|Pass' -count=1
+go test ./internal/tsfrontend -run 'TestSnapshotTypeScriptOptions|TestFrontendSnapshotKey|TestLogicalPath' -count=1
+go run ./cmd/ts2bin compatibility --update-baseline
+.\scripts\doctor.ps1 -Quiet
+```
+
+## 2026-08-05 二次方向审计与阶段拆分（历史检查点）
+
+- 总体架构再次确认正确：`typescript-go checker -> immutable frontend snapshot -> typed HIR -> target-aware MIR -> LLVM/object -> Rust C ABI runtime + LLD`。不采用 AST 直发 LLVM，也不以完整 JS engine 作为 static profile 基础。
+- 状态语义改为 `implemented`、`prototype`、`acceptance-blocked`、`complete`。`FE-008/009/011` 与 `IR-000` 已有实质生产实现，不再列为“缺失”；当前统一标记 `implemented / acceptance-blocked`。
+- `FE-008` 已出现 Kind-driven payload/role/arity registry；`FE-009` 已出现 per-specifier module binding、fail-closed effect registry/call closure 和 lowerer required-fact registry；`FE-011` 已出现 source-level target split、三项 TS option projection和 validated FrontendSnapshot/BuildPlan binding；`IR-000` 已出现 executor、fixed-point budget、pre/post verifier、effect proof 与 deterministic dumps。
+- `FE-010` 已拆成 `internal/frontendwire`、`internal/ast2bingo` 和 `cmd/ts2bin-replay`。`go list -deps ./cmd/ts2bin-replay` 不再包含 parser、binder、checker、AST 或 tsoptions，说明独立进程依赖方向正确。
+- 初次联合测试暴露的 `KindImportType`/`KindTypeLiteral` wire effect 分类已修复；随后 `internal/ast2bingo`、`cmd/ts2bin-replay`、FE effect/shape/BuildPlan 定向测试和 `internal/bingo` 均通过。全量 frontend compatibility baseline、snapshot fixture 与 default-options golden 仍因 DTO/hash 变化漂移，因此 Phase 1.5 尚未 complete，需人工审查有意变化后再更新基线。
+- 二次源码对比发现 `tsfrontend` 与 `frontendwire` 复制了完整 serialized validator；虽然 shape/validator 主体当前近似相同，effect helper 已在赋值、解构、for-of/in、property-name 和 type-context 规则上发生差异。后续不再手工同步两份实现，改为 `frontendwire` 单一 validator，`tsfrontend` 最终验证委托给 wire。
+- `scripts/doctor.ps1 -Quiet` 二次复核失败：当前 submodule worktree 与 lock 中 patch 不一致，状态为 `divergent`。旧 materialized-exact/remote apply 日志只保留为历史证据；实现与 baseline 稳定后必须重生成 patch/hash，并从 clean parent clone 重跑。
+- 路线图把原阶段 2 拆成 Phase 2A 与 2B。2A 只闭合 `add(number, number)` 的 snapshot/HIR/MIR/real LLVM/object/LLD/process/Node 链；2B 才扩 bool、变量、调用、CFG、string/null/undefined 和单次求值语法。
+- `REL-001` 拆出 `REL-001a` first-slice runner core，避免完整 release runner 与尚不存在的 backend/artifact oracle 形成验收依赖环。`VERT-001` 依赖 `REL-001a`，完整 handbook/diagnostic coverage 留给后续 `REL-001`。
+- 调整后下一顺序：单一 wire validator -> target/cache 与 no-EH 配置 -> replay/frontend migration full regression -> `IR-000` contract infrastructure 全量验收 -> 最后 clean-parent delivery -> Phase 2A typed-HIR 后续 handlers + number-only HIR/MIR verifier -> empty startup -> real LLVM/object/LLD -> `REL-001a` -> `VERT-001` -> Node differential -> Phase 2B。
+
+## 2026-08-05 审计收口增量
+
+- `FE-009a` 已同步 assignment/destructuring/for-of 相关 capture/wire helper并增加 round-trip tests；完整 `snapshot_validate.go` 仍在 `tsfrontend`/`frontendwire` 各有一份，因此只能记为 `implemented / acceptance-blocked`，下一步是删除 serialized validator 双写，而不是继续人工同步。
+- `FE-010/IR-000` 已进一步闭合：独立 replay process 会真实执行 `validate-snapshot -> typed-hir` canonical production prefix；dependency closure、跨进程重复输出、显式 evaluation-order/single-block HIR、缺 handler和 HIR/event tamper 拒绝均有 checked-in tests。typed HIR 之后的 RepresentationPlan/MIR/backend handlers 仍属于 Phase 2A。
+- 计划纠正了 FND 顺序：旧 patch 当前 `divergent`，但 `FND-004a` 不能先于仍会修改工作树的 FE/IR 任务。正确顺序是单一 wire validator -> target/cache 与 no-EH 配置 -> migration/full regression -> IR contract full regression -> 最后重生成 patch/hash并做 clean-parent test/vet。
+- 新增 `FE-011b`：当前代码/default golden/lock 只接受未实现的 `llvm-eh`，与“首切无 EH、首个 throwing profile 为 status/result”的架构不一致。Phase 2A 前先引入 canonical no-EH mode；status-code/native-unwind 后续分别锁定，禁止把未实现 capability 写入 artifact provenance。
+- Phase 2A 改用 first-slice 子任务 `IR-001a..005a/007a`、`RT-002a`、`BE-002a`，避免完整 IR/runtime/backend issue 中的变量、调用、general CFG、bool/string/null、phi/memory 和完整 registry 验收反向拉入 `add(number, number)` 纵切。Phase 2B 继续负责这些扩展。
+
+## 2026-08-05 Phase 1.5 退出审计收口
+
+- `FE-008a/009a` 已关闭：删除 capture 侧完整 serialized validator 与 shape registry 副本；`tsfrontend.ValidateProgramSnapshot` 只委托 `frontendwire`，fixture 增加 capture -> wire encode/decode/re-encode byte parity。
+- `FE-011b` 已关闭：默认、options golden、BuildPlan 和 `ts2bin.lock.json` 使用 `exceptions=none`；`llvm-eh` 只保留为未来常量并返回 `unavailable`。
+- `FE-011a` 路径身份已闭合：项目内 semantic paths 相对化；Windows/WSL 同根 snapshot bytes、TypeScriptDigest、ContentHash 一致。wire validator 在任何 digest/hash 比对前拒绝 config/options/source/module/diagnostic 中残留的 Windows drive、UNC 和 POSIX rooted disk path，真实跨盘 `rootDirs` Build 回归 fail closed。
+- UTF-8 baseline 已人工审查：Kind 351、API 4,893、stdlib 108 项零变化；100 个 semantic digest 中 28 个变化均来自 checker 合成符号名的有效 U+FFFD wire 规范化；snapshot contract golden 仅一处 U+FFFD 表达变化，config golden 不变。新增专门 canonical encode/decode/re-encode 测试。
+- 当前验证全绿：核心六包、核心六包 race、`go vet ./...`、frontend 九阶段（package/validator/module/checker/CLI/compatibility/race/shuffle/repeat）、`go test ./... -count=1`。此前 Windows watcher 时序失败本轮未复现，不能作为项目阻塞。
+- BuildPlan 语义已纠正：它是绑定 frontend hash 的 canonical unresolved request，不是 executable capability proof。架构/规格和代码注释统一要求 Phase 2A `ResolveTargetContext(toolchain manifest, runtime manifest)` 产出 TargetContext + DataLayout + CapabilitySet 后，RepresentationPlan/MIR/LLVM 才可继续。
+- 后续计划重排：`IR-007a` 先冻结 f64/NaN/-0/`+`；`BE-001a` Go-LLVM/TargetMachine 与 `RT-002a` Rust workspace/startup scaffold 并行；`TC-001a` 绑定首切唯一 capability；随后 `IR-001a..005a`、`RT-002b` 固定 `extern "C" double add(double,double)`/IEEE-754 bits harness、`BE-002a/004a`、`REL-001a`、`VERT-001`、`REL-002a`。
+- 最终 patch SHA-256 `759e0661a91c7b757a78106425618046dc0b8e348f2c1e31263f486c074a9c9f` 已生成；doctor materialized-exact、官方 remote shallow clean checkout apply/full test/vet/cleanup、WSL Go-LLVM verifier 和 Rust staticlib/LLD smoke 全部通过。当前唯一 Phase 1.5 交付阻塞是 `FND-004a` 的 parent commit/HEAD clean-clone 证明；未经用户授权不创建 commit，因此只能在提交后严格关闭。

@@ -67,9 +67,23 @@ foo.expect.out
 - binder：symbol、scope、hoist、module indicator、private name。
 - checker：TypeId/SignatureId、narrowed type、selected overload、type predicate、variance。
 - module resolution：Program 的 canonical path、resolution mode、ESM/CJS、package exports/imports。
-- snapshot：同一源码/config/commit 字节稳定，绝不带 checker 指针。
+- snapshot：同一源码/frontend config/commit 字节稳定，绝不带 checker 指针；换 target/CPU/GC/EH/emit 不改变 frontend hash。golden 必须精确覆盖 Symbol/Signature/Flow/Assertion/CaptureSet/named child/payload，不得只比较 table count、Kind 集和 hash 长度。
+- platform identity：大小写敏感 host 上 `A.ts`/`a.ts` 不碰撞，Windows/WSL/symlink/盘符按 host identity contract 产生稳定结果。
+- config merge：未显式 override 时完整保留 `tsconfig.bingoOptions`，显式 CLI override 只改变被点名字段。
 
-### 3.2 HIR/MIR
+### 3.2 Snapshot-to-lowering readiness
+
+- schema v2 的每个首批 S0/S1 node 都有已知 tagged syntax payload 和 named child role；删除或篡改 payload 必须稳定拒绝。
+- property 保存 read/write/optional/readonly/accessor/private proof，signature 保存 optional/rest/effect，assertion 保存 chain/assignability/representation proof。
+- capture 完成后主动 release AST/checker，序列化到 JSON 并由新 consumer process 重新加载；该进程只能读取 snapshot DTO。
+- replay consumer 为 `add(number, number)` 生成 canonical lowering events/typed HIR，并与 capture-time oracle 差分。
+- snapshot-only gate 是 Phase 2A `IR-001a` 的强制前置条件；仅比较 semantic digest 不算 lowering readiness。
+- first-slice determinism 使用全新 Frontend/VFS、fresh serialization、独立进程重复输出和显式 evaluation-order proof；在同一实例上重复 Build 不是充分证据。
+- canonical pass prefix、pre/post verifier 和 tamper cases 必须证明 snapshot/source-plan/HIR 不能跳步或伪造完成状态。
+
+精确 diagnostic oracle、完整 handbook/AST case manifest 和 artifact/oracle execution 在 `REL-001` 闭合；更广泛的并发度/Unicode/跨平台组合与 fuzz 在 `REL-003`/`REL-004` 闭合。它们不能被省略，但不反向扩大 Phase 1.5 的 frontend-to-lowering contract。
+
+### 3.3 HIR/MIR
 
 - AST Kind manifest 无漏项。
 - operator table 与 checker 类型匹配。
@@ -77,22 +91,23 @@ foo.expect.out
 - HIR/MIR verifier 对人为篡改的 malformed IR 失败。
 - generic specialization、variance adapter、cleanup/exception/suspend 边都有 golden。
 
-### 3.3 Runtime
+### 3.4 Runtime
 
 - primitive：NaN、Infinity、-0、UTF-16 code unit、BigInt/number 分离。
 - object/class：shape、getter/setter、private、super、static init、prototype identity。
 - collection：Map/Set 顺序、SameValueZero、weak reference、iterator close。
 - async：Promise resolution、thenable assimilation、microtask、错误传播。
 - resource：using/await using 正常、return、throw、break、continue、nested cleanup。
-- GC：root registration、write barrier、环、weak/finalization、async frame。
+- GC：single-mutator v1、每 safepoint active root、dead-slot clear、root publication optimizer barrier、write barrier 和环；weak/finalization/async frame 在对应 capability 开启后测试。
 
-### 3.4 LLVM/backend
+### 3.5 LLVM/backend
 
 - MIR verifier 通过后 `VerifyModule` 必须通过。
 - `opt`/PassBuilder 只允许配置中的 passes；优化前后运行结果一致。
 - `llc`/TargetMachine 输出 object，linker 能解析所有 capability symbols。
 - debug/source map 能回到原 TS span。
 - LLVM 版本、target triple、data layout、runtime ABI hash 进入 golden header。
+- `VERT-001` 在对象/GC/EH 前独立跑 Linux x86-64 real LLVM -> object -> deterministic LLD -> executable，并与 Node oracle 比较 `add` 结果。
 
 ## 4. Handbook 交叉覆盖
 
@@ -156,12 +171,14 @@ Promise、iterator、dispose、Temporal、Intl 等使用标准测试向量或独
 
 ### 6.3 Compile-time oracle
 
-将 TypeScript checker 结果保存为 snapshot：类型兼容、overload 选择、narrowing 和 variance 只比较语义 digest，不比较内部 TypeId 数值。
+将 TypeScript checker 结果保存为 snapshot：类型兼容、overload 选择、narrowing 和 variance 不比较内部 TypeId 数值。semantic digest 用于兼容性分类；进入 lowering 的语法、property/signature/assertion proof 还必须由 snapshot-only replay 消费，不能只比较 digest。
 
 ## 7. Property/fuzz 测试
 
 - scanner/parser fuzz：输入大小、嵌套深度和超时有上限，保证无 panic/死循环。
 - snapshot fuzz：随机 AST Kind 组合只能得到稳定诊断或合法 snapshot。
+- snapshot validator fuzz：随机破坏 semantic reference、parent/root graph、assertion/flow proof、config/provenance digest 和 canonical JSON，只能稳定拒绝，不能 panic 或接受假证明。
+- path/manifest fuzz：拒绝 `..` escape、大小写别名碰撞和非法 Unicode/path encoding；覆盖 Windows drive/backslash、WSL、case-sensitive/insensitive VFS。
 - lowering fuzz：HIR/MIR verifier 是第一道安全边界；非法 IR 不交给 LLVM。
 - differential fuzz：只执行 capability-safe、无 FFI、无 dynamic 的程序；运行在隔离进程。
 - metamorphic：括号、冗余 `as`、等价短路重写、类型别名展开不应改变运行结果或 semantic digest。
@@ -187,17 +204,26 @@ runtime_allocs, gc_pause, binary_size
 
 ## 9. Cache 与可复现构建
 
-cache key 至少包含：
+cache 分两级。target-independent frontend cache key 至少包含：
 
 ```text
 source content hashes
-tsconfig normalized digest
+frontend-semantic tsconfig digest + source profile
 typescript-go commit
 stdlib manifest hash
-bingo HIR/MIR schema
+snapshot schema
+filesystem identity policy
+```
+
+target-dependent artifact cache key 再组合：
+
+```text
+frontend snapshot hash
+bingo HIR/MIR schema + pass/effect DAG version
 runtime ABI/capability hash
+Rust toolchain + Cargo.lock/features + runtime archive hashes
 LLVM major + target triple + cpu/features
-profile/gc/exceptions/overflow options
+runtime/gc/exceptions/overflow/bounds/emit options
 ```
 
 缓存产物保存 provenance header；任何 key 缺失都视为 cache miss。release 构建禁止读取开发机全局 runtime 或未锁定 LLVM。
@@ -206,11 +232,15 @@ profile/gc/exceptions/overflow options
 
 | Job | 环境 | 重点 |
 | --- | --- | --- |
+| clean-clone | fresh checkout + recorded fork remote | gitlink/fork/lock 可获取；无 dirty/untracked 依赖；Phase 1 全门禁 |
 | frontend-linux | Go + tsgo fork | Program/checker/snapshot/full diagnostics |
 | frontend-windows | Go 原生 | CLI、路径、诊断、无 LLVM 模式 |
-| llvm-linux | LLVM 20 + go-llvm | VerifyModule、opt、llc、link/run |
-| llvm-macos | LLVM 20 | target/data layout、runtime ABI |
-| wsl-windows | WSL2 Ubuntu | Windows 开发推荐 LLVM 环境 |
+| snapshot-replay | isolated consumer process | JSON round-trip 后无 AST/checker 的 `add` lowering readiness |
+| runtime-rust | locked Rust targets | crate tests、ABI/layout、panic/status、Miri/sanitizer、archive manifests |
+| vertical-linux | LLVM 20 + go-llvm + LLD | primitive `VERT-001` real LLVM/object/link/run + Node differential |
+| llvm-linux | LLVM 20 + go-llvm | 完整 VerifyModule、opt、llc、runtime link/run |
+| llvm-macos | LLVM 20 + Rust runtime | target/data layout、runtime ABI、LLD archive link |
+| wsl-windows | WSL2 Ubuntu + Rust target | Windows 开发推荐 LLVM 环境、COFF runtime archive/link smoke |
 | stdlib-manifest | typescript-go libs | declaration/runtime capability diff |
 | fuzz-nightly | sandbox | parser/lowering/differential/cleanup |
 | reproducible | clean container | artifact digest、source map、cache |
@@ -232,19 +262,22 @@ ts2bin test        # case manifest runner
 ts2bin doctor      # tsgo/LLVM/runtime capability audit
 ```
 
-`doctor` 必须显示：tsgo commit、Go、LLVM/llvm-config、target triple、runtime manifest、可用 capability 和缺失项。
+`doctor` 必须显示：tsgo commit、Go、LLVM/llvm-config、LLD、target triple、Rust runtime build ID/Cargo features、runtime archive/manifest、可用 capability 和缺失项。
 
-发布物包含 CLI、runtime、capability manifests、标准库 manifest、许可证、IR schema 版本和 reproducibility metadata。只发布通过 static conformance 的 profile；experimental ESNext/dynamic 单独标注。
+`ts2bin test --stage frontend` 必须执行完整 frontend gate registry，而不是只运行一个 conformance test：snapshot validator、ModuleGraph、checker borrow/race、compatibility、CLI、shuffle 和选定重复次数都必须在报告中列出实际命令与结果。快速本地子集应使用另一个显式命令名，不能冒充阶段退出门禁。
+
+发布物包含 CLI、按 target/profile 构建的 Rust native static archives、startup object、capability/layout/runtime lock、self-hosted stdlib package、标准库 manifest、第三方许可证、IR schema 版本和 reproducibility metadata。只有 clean-clone、snapshot-only replay、real-LLVM 纵切和对应完整 conformance 都通过的 profile 才能发布；experimental ESNext/dynamic 单独标注。
 
 ## 12. Issue 拆分建议
 
 本节只保留优先级视图；稳定 issue ID、依赖和退出命令以 [implementation-backlog.md](implementation-backlog.md) 为准：
 
 ```text
-P0  FND-001..003, FE-001..007, IR-001..005
-P1  IR-006..008, OBJ-001..006, MOD-001..003
-P2  RT-001..006, ADV-001..004
-P3  ADV-005..008, BE-001..005, REL-001..005
+P0  Phase 1.5: FE-008a/009a/010a/011a/011b, IR-000a, then FND-004a
+P0  Phase 2A: IR-001a..005a/007a, RT-002a, BE-001/002a/004a, REL-001a/002a, VERT-001
+P1  Phase 2B: full IR-001..008 primitive/control-flow contracts
+P2  OBJ/MOD/RT/GC/EH/ADV feature groups in backlog dependency order
+P3  full BE/REL productization, second target, broad fuzz/performance/release matrices
 ```
 
 每个 issue 必须引用：矩阵行、capability、golden、diagnostic code、验收命令和预计影响的 schema/ABI 版本。新增 issue 不应绕开 backlog 的依赖图；若需要改变阶段顺序，先更新路线图和变更控制记录。

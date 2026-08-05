@@ -7,7 +7,7 @@
 - 语法支持以 [typescript-support-matrix.md](typescript-support-matrix.md) 为准。
 - tsgo 生命周期、snapshot 和模块解析以 [tsgo-integration.md](tsgo-integration.md) 为准。
 - HIR/MIR 类型、指令和 verifier 以 [bingo-ir-spec.md](bingo-ir-spec.md) 为准。
-- runtime、GC、标准库和 capability 以 [stdlib-runtime-plan.md](stdlib-runtime-plan.md) 为准。
+- runtime、GC、标准库和 capability 以 [stdlib-runtime-plan.md](stdlib-runtime-plan.md) 为准；Rust runtime 实现、ABI 和链接以 [rust-runtime-and-linking.md](rust-runtime-and-linking.md) 为准。
 - 测试、差分、CI 和发布以 [testing-conformance-and-release.md](testing-conformance-and-release.md) 为准。
 - issue 编号、依赖和阶段退出命令以 [implementation-backlog.md](implementation-backlog.md) 为准。
 - 代码抽象、核心流程注释和公共 API 文档以 [coding-and-maintainability-standards.md](coding-and-maintainability-standards.md) 为准。
@@ -76,8 +76,8 @@ stateDiagram-v2
 | `D0` | 文档、拼写、非规范性注释、测试说明 | 不改变编译结果 |
 | `D1` | 诊断文案、snapshot 展示、测试工具、无行为 CLI | 可能影响开发体验或 golden |
 | `D2` | AST Kind 支持矩阵、类型规则、HIR/MIR、消糖、模块解析 | 改变编译语义或 IR schema |
-| `D3` | runtime ABI、对象布局、GC、异常、async、FFI、LLVM lowering | 可能产生内存安全、跨平台或二进制兼容问题 |
-| `D4` | tsgo commit、标准库基线、LLVM 大版本、发布 profile、目标平台 | 可能改变整个输入/输出基线 |
+| `D3` | runtime ABI、Rust unsafe/crate feature、对象布局、GC、异常、async、FFI、LLVM lowering | 可能产生内存安全、跨平台或二进制兼容问题 |
+| `D4` | tsgo commit、标准库基线、rustc/LLVM 大版本、发布 profile、目标平台 | 可能改变整个输入/输出基线 |
 
 变更等级取所有触及内容中的最高级。例如，一个新增 `Array` API 的 issue 如果同时增加 runtime symbol 和 ABI，按 `D3` 处理；更新 `typescript-go` commit 即使只修复一个 parser bug，也至少按 `D4` 处理。
 
@@ -128,6 +128,7 @@ stateDiagram-v2
 - 改变泛型实例化、协变/逆变、可变容器、函数调用约定或布局 adapter。
 - 改变 optional chain、解构、spread、using、async、generator、decorator、模块初始化等求值顺序。
 - 增加或修改 runtime capability、GC、异常、Promise、FFI、LLVM intrinsic 或 target ABI。
+- 修改 Rust `unsafe` 契约、panic strategy、`repr(C)` layout、Cargo feature/dependency、`std/no_std` 边界或 native archive 组成。
 - 修改 tsgo commit、标准库声明基线、LLVM 大版本、profile 默认值或 cache key。
 
 设计审计必须回答：语义来源是什么、为什么不能复用现有层、失败时如何拒绝、如何保持向后兼容、哪些 artifact 会改变、如何回滚。
@@ -153,7 +154,7 @@ audit level and reviewers
 
 ### 5.1 建立干净输入
 
-1. 确认 `typescript-go` commit、Go、标准库 manifest、LLVM 和 runtime ABI 版本。
+1. 确认 `typescript-go` commit、Go、标准库 manifest、Rust toolchain/Cargo.lock/features、LLVM/LLD 和 runtime ABI 版本。
 2. 检查工作区状态；不能覆盖用户已有修改，也不能修改范围外的 tsgo 核心文件。
 3. 规范化 tsconfig 和 profile，记录 canonical path、target triple、GC、异常和 bounds check 选项。
 4. 创建或更新 case manifest，先让失败以预期诊断出现。
@@ -320,7 +321,9 @@ full conformance
 | 阶段 | 必须完成 | 典型审计 |
 | --- | --- | --- |
 | 阶段 1 前端锁定 | facade、诊断、snapshot、Kind manifest、ModuleGraph | A2 implementation + upstream compatibility |
-| 阶段 2 静态核心 | HIR/MIR schema、primitive、CFG、verifier、单次求值 | A2 semantic/IR |
+| Phase 1.5 lowering contract | 单一 serialized validator、semantic proof、target/cache、checker-free replay、pass contract、最终 clean delivery | A2 frontend/IR boundary + reproducibility |
+| 阶段 2A first slice | number-only HIR/MIR、empty startup、real LLVM/object/LLD、runner/Node differential | A2 semantic/IR + A4 executable provenance |
+| 阶段 2B 静态核心 | bool/变量/调用/general CFG、更多 primitive、单次求值 | A2 semantic/IR |
 | 阶段 3 对象与方差 | layout、closure、class、variance、adapter | A3 layout/type-safety |
 | 阶段 4 模块与核心 runtime | module init、泛型、集合、iterator、cleanup、capability | A3 runtime/ABI |
 | 阶段 5 高级 runtime | EH、Promise、async、generator、decorator、JSX、dynamic | A3 runtime/interop |
@@ -372,7 +375,7 @@ Follow-up issues and owner:
 ```text
 Release profile and target matrix:
 typescript-go commit / stdlib hash / LLVM major:
-runtime ABI and Bingo schema versions:
+runtime ABI, Rust toolchain/archive and Bingo schema versions:
 Conformance and differential summary:
 Reproducible artifact digests:
 Known limitations and experimental capabilities:

@@ -1,6 +1,6 @@
-# ts2bin 六阶段开发计划
+# ts2bin 六阶段开发计划（含 Phase 1.5 前置门禁）
 
-本计划把 `ast2bingo` 拆成六个可独立验收的阶段。每阶段都必须增加源码样例、诊断 golden、HIR/MIR golden 和最少一组可运行测试；未通过上一阶段退出条件，不进入下一阶段扩展语法。
+本计划把 `ast2bingo` 拆成六个可独立验收的阶段，并在前端与 HIR 之间增加一个不可跳过的 Phase 1.5 lowering-readiness 门禁。每阶段都必须增加源码样例、诊断 golden、HIR/MIR golden 和最少一组可运行测试；未通过上一阶段退出条件，不进入下一阶段扩展语法。
 
 阶段的输入和产物必须分别对照 [tsgo-integration.md](tsgo-integration.md)、[bingo-ir-spec.md](bingo-ir-spec.md)、[stdlib-runtime-plan.md](stdlib-runtime-plan.md) 和 [testing-conformance-and-release.md](testing-conformance-and-release.md)。实际编码从 [implementation-specification.md](implementation-specification.md) 进入，并同时遵守逐语法 lowering、类型/方差、runtime/backend 和拒绝诊断四份细则。本文件只定义实施顺序，不重复定义这些契约；若路线图与 verifier、capability manifest 或 case manifest 冲突，以后者为准。需要直接拆 issue 时使用 [implementation-backlog.md](implementation-backlog.md)，其中的编号和依赖是执行层契约。
 
@@ -8,7 +8,9 @@
 
 ```text
 阶段 1 前端锁定
-  -> 阶段 2 HIR + 静态核心
+  -> Phase 1.5 snapshot/lowering 契约闭合
+  -> 阶段 2A number-only real-LLVM 纵切
+  -> 阶段 2B primitive 控制流与静态核心
   -> 阶段 3 布局/函数/对象/闭包/variance
   -> 阶段 4 模块/泛型/集合/迭代/资源
   -> 阶段 5 runtime-heavy 语义
@@ -26,7 +28,7 @@
 1. 固定 `typescript-go` commit、Go toolchain、标准库声明和 tsconfig 默认值；fork 只增加 `cmd/ts2bin` 与内部包。
 2. 构造 `compiler.Program`，读取 source files，依次检查 syntactic、bind、semantic、global diagnostics。
 3. 为 `ast.Node` 建立只读 visitor，生成 `TypedSnapshot`：NodeId、Span、Kind、SymbolId、TypeId、SignatureId、flow facts、capture set、module id。
-4. 把 checker 查询集中到 `internal/ast2bingo/semantic.go`，不让后续 lowering 直接调用 checker 私有实现。
+4. 把 checker 查询集中到 `internal/tsfrontend`；`internal/ast2bingo` 只能消费已冻结的 snapshot，不得直接调用 checker。
 5. 根据 [typescript-support-matrix.md](typescript-support-matrix.md) 实现 subset gate：`any`、不可靠断言、dynamic object、未实现 async/EH 等输出 BINGO 诊断。
 6. 建立 source span 到 HIR/MIR/LLVM metadata 的 ID 链，保证错误可以回到原始 TS 行列。
 7. 实现 `internal/tsfrontend` facade 和 `ProgramSnapshot` schema；checker 按独占借用分组捕获，`done()` 后才允许并行 lowering。
@@ -47,39 +49,88 @@
 - snapshot 不保存长期有效的 AST 指针，不依赖生成文件中未承诺的私有布局。
 - snapshot schema、AST Kind manifest、配置归一化结果和诊断排序均有稳定 golden；任何 checker 指针泄漏测试失败。
 
-## 阶段 2：Bingo HIR、静态类型和控制流核心
+## Phase 1.5：snapshot lowering 契约闭合
 
 ### 目标
 
-实现可以独立验证的 Bingo HIR，覆盖算术、布尔、字符串常量、变量、函数、基本控制流和显式转换。此阶段可用纯 Go HIR interpreter 或 `llir/llvm` 生成文本做快速反馈，生产 LLVM 绑定稍后固定。
+把 Phase 1 的“可审计前端快照”提升为“可供 HIR 使用的输入契约”。Phase 1.5 只负责 frontend DTO/semantic proof、target/cache 边界、独立 replay 依赖闭包和可执行 pass contract；真实 MIR、LLVM、runtime、artifact runner 与 Node differential 属于 Phase 2A 的纵切退出条件，不得反向扩大 Phase 1.5。入口通过后只启动 primitive IR，首条可执行纵切通过前不得扩展新的 HIR 语法组。
 
 ### 工作项
 
-1. 定义 `TsType`、`RepType`、`ValueId`、`BlockId`、`FuncId`、`SymbolId` 和 source origin。
-2. 实现 HIR builder：literal、identifier、binary/unary、call、variable、return、if、while、for、switch、conditional。
-3. 将 flow narrowing、literal widening、`never`/unreachable 转成 HIR facts；不在 lowering 中重新猜测类型。
-4. 实现 `as`、`satisfies`、non-null、nullish/optional chain、logical assignment 的消糖。
-5. 建立 HIR verifier：值类型、定义先后、CFG、phi、短路路径和不可达块。
-6. 实现常量折叠和副作用序列测试，但不做跨函数激进优化。
-7. 依据 [bingo-ir-spec.md](bingo-ir-spec.md) 固定 HIR -> MIR pass 顺序，建立 HIR/MIR verifier、effect 检查和 source-origin 传播。
+1. `FND-004`：提供可获取的 fork/patch 交付机制；lock 已记录 upstream commit 与最终 patch base/path/SHA-256，doctor、官方 remote clean checkout full test/vet 和 WSL smoke 已通过。剩余门是把正确 gitlink/lock/patch/scripts 纳入 parent commit，并从该 HEAD clean clone 复验。
+2. `FE-008`：实现 snapshot schema v2 的 tagged `SyntaxPayload`、具名 child roles、source blob、literal/operator/name/property/import-export/class-init/type payload；checker capture panic/error 必须 fail closed，validator 重算 digest 并验证引用、parent/root 和 acyclic 不变量。
+3. `FE-009`：补齐 property read/write/optional/readonly/accessor/private identity、signature parameter optional/rest/effect、assertion chain/representation proof、non-null/flow proof kind、runtime capture 分类和 specifier-level type-only module edge。
+4. `FE-011`：修复大小写敏感路径 identity，完整捕获影响语义的 TS options，拆分 target-independent `FrontendSnapshot` 与 target-dependent `BuildPlan`，并验证 profile override/cache key。
+5. `FE-010`：在稳定的 frontend/build-plan 边界上建立首纵切 snapshot-only replay；释放 AST/checker 后，仅用序列化 snapshot 生成 `add(number, number)` 的 canonical HIR/lowering events，并以 readiness registry、manifest metadata 和 malformed negative cases 锁定边界。广泛 runner/fuzz 在 `REL-001/003` 收口。
+6. `IR-000`：收敛 source type plan、typed HIR、specialization fixed point、target representation、CFG/SSA 和 effect verifier 的唯一 DAG。
+
+当前状态按“代码存在”和“验收完成”分开记录。`FE-008/009/010/011` 的 wire 单一 validator、semantic proof、checker-free replay、target/path/profile/cache、no-EH 和 migration regression 已闭合；`IR-000` 的 executor/fixed-point/hooks/dumps 与 validate-snapshot -> typed-HIR production prefix 也已通过全套 regression。最终 patch/hash、doctor、官方 remote clean checkout full test/vet/cleanup 与 WSL smoke 已通过；当前唯一 Phase 1.5 交付阻断是未经授权提交的 parent HEAD clean-clone 证明。typed HIR 之后的 TargetContext binding、production handlers、真正 target-aware MIR、LLVM/object/LLD 与 Node oracle 属于 Phase 2A。
+
+### 退出门槛
+
+- clean clone 可获取并构建 Phase 1 源码，不能依赖 submodule dirty state。
+- S0/S1 首批节点的 syntax payload 无未知项，snapshot-only replay 与 capture-time oracle 一致；capture helper 不得把 checker panic/error 静默降为空事实。
+- snapshot validator 对悬空 semantic ID、篡改 flow/assertion proof、parent/root 不一致、cycle、digest/config/provenance 漂移全部 fail closed。
+- named type-only import/export、runtime capture、non-null/flow、assertion chain 和 diagnostic stage/span/multiplicity 有精确 fixture。
+- S0/S1 accept 必须来自实际 lowerer registry，不得把 manifest 中的未来 `LoweringPlan` 当作已实现 handler；bind diagnostics 保留独立 stage。
+- `A.ts`/`a.ts`、Windows/WSL path、target 切换和 profile override 有独立 deterministic tests。
+- `BaseURL`/`RootDirs`/`TypeRoots`/paths substitutions、source/module/diagnostic paths 中残留的盘符、UNC 或 POSIX rooted path 在 wire 边界 fail closed；同根外部路径只能以可搬迁的相对身份进入 hash。
+- Phase 2A 的 BuildPlan 使用明确的 no-EH mode；`BuildPlan` 只是 canonical unresolved request，必须先经 manifest 驱动的 `ResolveTargetContext`；未实现的 `llvm-eh` 不得作为默认或已支持 provenance。
+- IR schema ownership、pass/effect DAG、cache invalidation 和 provenance 已冻结并有 malformed/negative golden。
+- 最终 patch/hash、官方 remote clean checkout apply/full test/vet 已通过；parent gitlink/lock/patch/scripts 进入获授权 commit 后，再从该 parent HEAD clean clone 完成最终证明。
+
+## 阶段 2A：primitive 可执行纵切
+
+### 目标
+
+只闭合 `add(number, number)` 的可验证、可执行链：serialized snapshot -> typed HIR -> target-aware MIR -> real LLVM -> object -> LLD -> process output -> Node oracle。必须先通过 Phase 1.5；纯 Go interpreter、伪 MIR 或文本 LLVM 只能提供局部反馈，不能替代本阶段的真实产物证据。
+
+### 工作项
+
+1. 先固定 JavaScript `number=f64`、NaN payload、`-0`、`+` 和 C ABI IEEE-754 bit-observation contract，再冻结首切实际使用的 `number`/`void` TsType、RepType、ValueId、BlockId、FuncId、SymbolId 和 source origin；其余类型不得用占位成功状态穿过 verifier。
+2. 保留现有 primitive replay/typed-HIR production prefix，仅支持参数读取、`number + number` 和单一 return，并以 fail-closed readiness registry 作为输入门禁。
+3. 并行建立 `BE-001a` Go-LLVM/TargetMachine/DataLayout 基座和 `RT-002a` Rust workspace/empty startup scaffold；它们不能自行声称完成 capability binding。
+4. 实现 manifest 驱动的 `TC-001a ResolveTargetContext`，首切只接受显式 Linux x86-64、LLVM 20、generic CPU、no-EH 和锁定 runtime；空 target、interop/unsafe、ARC/arena、bounds-off、未知 feature/runtime 必须返回 `unavailable`。
+5. 实现首切 HIR -> MIR lowering 和独立 MIR schema/verifier；只消费已绑定 `TargetContext`，拒绝无返回 CFG、非法/稀疏/重复 ID、错误类型/effect、错误 DataLayout/capability 和伪造 provenance。
+6. 为 canonical pass executor 提供 typed HIR 之后的首切 production handlers；不适用的阶段必须由 verifier 证明为 no-op，不能靠测试 handler 冒充生产集成。
+7. 完成 `RT-002b` 固定 `extern "C" double add(double,double)` 的 startup/harness、`BE-002a/004a` real LLVM/object/LLD 链路；完整 IR/runtime/backend issue 的 Phase 2B 范围不作为首切前置。
+8. 先实现最小 `REL-001a` case-runner core，再由 `VERT-001` 执行完整 snapshot-to-process 真实产物，并由 `REL-002a` 与 Node oracle 差分。
 
 ### 首批必须可运行样例
 
 ```ts
 export function add(a: number, b: number): number { return a + b; }
-export function classify(x: string | number): string {
-  if (typeof x === "string") return x;
-  return String(x);
-}
 ```
 
 ### 验收门槛
 
-- HIR verifier 对所有正例通过，对篡改 golden 的非法 IR 必须报错。
+- HIR/MIR verifier 对首切正例通过，对篡改 schema、ID、类型、effect、origin、terminator 和 pass dump 的 negative golden 全部拒绝。
+- Linux x86-64 `add(number, number)` 必须由独立 replay 进程经 HIR/MIR verifier、real LLVM、object 和确定性 LLD 运行，并与 Node oracle 一致。
+- backend 必须拒绝未经 `ResolveTargetContext` 的 BuildPlan；TargetContext、toolchain/runtime manifest hash、DataLayout 和 capability closure 必须进入 MIR/artifact provenance。
+- first-slice harness 通过固定 C ABI 传递 `double`，以 IEEE-754 bit pattern 观测 NaN、`-0` 和普通结果，避免当前 TS 子集缺少 literal/call 入口而无法形成可观察闭环。
+- case manifest 记录 source/snapshot/HIR/MIR/LLVM/object/executable/output 的 provenance；同一输入重复运行摘要稳定。
+- 任何对象、字符串、GC、EH、async、模块或广泛控制流工作都不能代替上述闭环；链路未闭合时 Phase 2A 不退出。
+
+## 阶段 2B：primitive 控制流与静态核心扩展
+
+### 目标
+
+在 Phase 2A 的真实产物链上扩展 `bool`、变量、调用与基本 CFG，再按表示和 runtime 证据引入 string、null/undefined 和单次求值消糖。每增加一个语法组，必须同时增加 snapshot proof、HIR/MIR golden、malformed verifier case 和 Node observable differential。
+
+### 工作项
+
+1. 实现 literal、identifier、unary/binary、call、variable、return、if/while/for/switch/conditional 的 HIR builder 与 CFG lowering。
+2. 将 flow narrowing、literal widening、`never`/unreachable 转成 HIR facts；不在 lowering 中重新猜测类型。
+3. 固定 bool、null/undefined 与 UTF-16 string 的表示和 ABI，再实现对应 conversion/operator table。
+4. 实现 `as`、`satisfies`、non-null、nullish/optional chain 和 logical assignment 的单次求值消糖。
+5. 扩展 HIR/MIR verifier 的 dominance、phi、短路、cleanup/effect 规则；实现保序常量折叠，不做跨函数激进优化。
+
+### 验收门槛
+
+- `classify` 等控制流样例经同一 real-LLVM runner 与 Node oracle 一致。
 - `f64` number、bool、UTF-16 string、null/undefined 的表示固定并有 ABI 测试。
-- optional chain、nullish、短路、条件表达式的副作用次数与 TypeScript/JavaScript oracle 一致。
-- 误用 dynamic、跨域隐式转换和 disjoint assertion 在 HIR 入口被拒绝。
-- verifier 能拒绝未定义值、非法 phi、effect 不匹配和未处理 cleanup；任何 malformed golden 都不能到达 LLVM backend。
+- optional chain、nullish、短路和条件表达式的副作用次数与 TypeScript/JavaScript oracle 一致。
+- 误用 dynamic、跨域隐式转换和 disjoint assertion 在 HIR 入口被拒绝；任何 malformed golden 都不能到达 LLVM backend。
 
 ## 阶段 3：表示布局、函数、对象、类、闭包与 variance
 
@@ -89,7 +140,7 @@ export function classify(x: string | number): string {
 
 ### 工作项
 
-1. 固定对象 shape、class layout、method table、field offset、array/tuple layout 和 nullable representation。
+1. 先完成 `OBJ-000`：冻结 structural `ObjectView`、aliasing、identity/equality、read/write 和 GC trace/C ABI 规则；再固定 object shape、class layout、method table、field offset、array/tuple layout 和 nullable representation，并由 `bingo-abi` schema 同时生成 Rust `repr(C)`、manifest 和 LLVM layout 契约。
 2. 实现 function value、closure environment、lexical `this`、recursive function 和 indirect call。
 3. 实现 class extends、constructor/super、field initializer、getter/setter、private/protected、static block。
 4. 建立 Bingo variance checker：函数参数逆变、返回协变、可写字段/数组不变、只读集合协变。
@@ -120,6 +171,7 @@ export function classify(x: string | number): string {
 6. 将 `for...of`、迭代器、array fast path、object/array spread 和解构连入 runtime。
 7. 实现 `using`/`await using` 的 cleanup stack、`Disposable`/`AsyncDisposable` ABI。
 8. 为每个标准库调用查询 [stdlib-runtime-plan.md](stdlib-runtime-plan.md) 的 capability manifest；声明存在但 runtime 未实现时在编译期报错。
+9. 建立 self-hosted stdlib HIR/package，先把 Array/String/Set/Iterator 中不依赖原始内存的泛型算法接入普通 specialization 和 verifier。
 
 ### 验收门槛
 
@@ -137,14 +189,14 @@ export function classify(x: string | number): string {
 
 ### 工作项
 
-1. 实现异常 ABI：throw、try/catch/finally、invoke/unwind、cleanup 和目标平台 personality。
-2. 实现 `Promise<T>`、async/await 状态机、错误 continuation、top-level await（若模块 profile 开启）。
+1. 先完成 `EH-001` 的全链 status/exception-carrier ownership 与 target bridge 契约，再在 Rust `bingo-rt` workspace 中实现异常 ABI：普通 helper 返回 status/exception handle，LLVM 与极薄平台 shim 负责 throw、try/catch/finally、invoke/unwind、cleanup 和目标 personality；Rust panic 不表达语言异常。
+2. 在独立 Rust crate 中实现 Promise/microtask 原语，并与 async/await 状态机、错误 continuation、top-level await（若模块 profile 开启）连接。
 3. 实现 generator/`yield`/`yield*` frame；如果目标 runtime 不完整，保持默认 R。
-4. 实现 BigInt、RegExp、Symbol、动态属性、`instanceof`、abstract equality 等独立 runtime 模块。
+4. 以独立 Rust crate/capability 实现 BigInt、RegExp、Symbol、动态属性、`instanceof`、abstract equality 等 runtime 模块；重型 engine 和数据版本必须锁定。
 5. 标准 decorator 与 legacy decorator 分开，固定 metadata、initializer 和执行顺序。
 6. JSX 先按 checker 解析 factory/fragment，再走普通调用；建立最小 JSX runtime。
 7. dynamic profile：`DynamicValue`、属性字典、外部 JS/Node/FFI boundary、显式 checked cast 和诊断统计。
-8. general static profile 默认接入非移动 tracing GC；ARC/arena 只实现为带无环证明和 capability 限制的受限 profile。
+8. 先完成 `GC-001` 的 single-mutator、safepoint active-root/dead-slot 和 optimizer barrier 契约，再接入 Rust 非移动 tracing GC；`Gc<T>` 不等于 root，unsafe、root、barrier 和 FFI 边界按 [rust-runtime-and-linking.md](rust-runtime-and-linking.md) 审计。ARC/arena 只实现为带无环证明和 capability 限制的受限 profile。
 
 ### 验收门槛
 
@@ -154,27 +206,28 @@ export function classify(x: string | number): string {
 - `eval`、`with`、任意 Proxy、原型改写等仍按矩阵拒绝，除非专门实现并单独命名 profile。
 - GC root、写屏障、异常、async frame 和 cleanup 的 ABI 都有 runtime contract 与行为测试，不能只通过链接检查。
 
-## 阶段 6：LLVM 后端、优化、目标平台与产品化
+## 阶段 6：生产 LLVM 后端、优化、目标平台与产品化
 
 ### 目标
 
-把经过 MIR verifier 的程序稳定生成 LLVM IR、目标文件和可执行产物，建立版本固定、差分测试、性能和发布流程。
+把经过 MIR verifier、对象/runtime/EH 契约闭合的程序稳定生成 LLVM IR、目标文件和可执行产物，建立版本固定、差分测试、性能和发布流程。阶段 2 的 `VERT-001` 只证明 primitive real-LLVM 链路，不等于本阶段的产品 backend 完成。
 
 ### 工作项
 
 1. 使用 `tinygo.org/x/go-llvm` 建立 backend context/module/builder wrapper；固定 LLVM 大版本，首版优先 LLVM 20。
 2. 将 MIR 类型、block、phi、call/invoke、global、debug/source metadata 映射为 LLVM IR；每个函数生成后立即局部检查。
 3. 运行 `VerifyModule`、PassBuilder/`default<O2>`，再用 TargetMachine 输出 bitcode/object/assembly。
-4. 接入 `bingo-rt`，固定跨平台 calling convention、data layout、allocator、GC/写屏障、异常和线程模型。
+4. 用锁定 Cargo/rustc 构建 `bingo-rt` 原生 static archives，固定 `extern "C"` calling convention、data layout、allocator、GC/写屏障、panic/status、异常和线程模型。
 5. 实现 incremental cache：source/config/frontend snapshot hash -> HIR/MIR/LLVM artifact；cache key 必须含 LLVM/runtime ABI 版本。
 6. 做 TypeScript/JavaScript oracle 差分、LLVM verifier、fuzz、compile-fail、性能和二进制可复现测试。
-7. 设计 Windows/WSL2、Linux、macOS 的构建矩阵；原生 Windows 的 cgo 绑定失败应给出明确环境诊断。
+7. 设计 Windows/WSL2、Linux、macOS 的构建矩阵；锁定 Rust targets 和 LLD driver。原生 Windows 的 go-llvm/cgo 绑定失败应给出明确环境诊断，但 runtime staticlib 构建和 frontend job 必须独立可验证。
 8. 按 [testing-conformance-and-release.md](testing-conformance-and-release.md) 接入 case manifest、Node/规范差分、fuzz、cache provenance 和可复现构建门禁。
 
 ### 验收门槛
 
 - 所有发布样例 LLVM verifier 通过，`opt`、`llc`、linker 产生可运行文件。
 - 同一输入、工具链和 runtime commit 可复现相同 LLVM/目标文件摘要。
+- 同一 Rust toolchain、Cargo.lock/features、target/profile 和 runtime source 可复现相同规范化 archive/layout/capability 摘要。
 - 失败分类清晰：TS 诊断、Bingo 子集拒绝、runtime ABI 缺失、LLVM/backend bug。
 - 至少覆盖 x86-64 Linux 和一个第二目标；平台差异不能改变 TypeScript observable semantics。
 - 发布 profile 的 handbook 交叉覆盖、标准库声明/成员 manifest、LLVM verifier、runtime ABI hash 和 artifact digest 全部可由 CI 报告追溯。
@@ -207,4 +260,6 @@ export function classify(x: string | number): string {
 | TypeScript 类型与运行时脱节 | 不安全布局/调用 | TsType/RepType 分层、MIR verifier、checked cast |
 | 泛型代码爆炸 | 编译时间/二进制膨胀 | 按表示单态化、实例上限、共享引用版本 |
 | 异常/async/GC 跨平台差异 | 运行时崩溃 | runtime ABI versioning、平台 feature gate、阶段性 R |
+| Rust ABI/panic/unsafe 泄漏 | 未定义行为或无法稳定链接 | 只暴露 `repr(C)`/`extern "C"`、panic=abort、status 异常、unsafe 审计和 layout 双向验证 |
+| rustc/Cargo feature 漂移 | archive、布局或行为不可复现 | 锁定 toolchain/Cargo.lock/features/target，全部进入 runtime lock 和 cache provenance |
 | 直接复用 JS emitter | 隐式 coercion 和动态对象泄漏 | emitter 只作 oracle，独立 HIR/MIR lowering |

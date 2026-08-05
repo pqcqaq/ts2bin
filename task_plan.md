@@ -94,3 +94,55 @@
 | S. 类型、泛型与方差算法 | complete | 完成规范化、表示选择、assignability、variance SCC、adapter 和单态化算法 |
 | T. runtime/backend 与拒绝策略 | complete | 完成对象布局、异常、async、GC、LLVM lowering、能力边界和诊断算法 |
 | U. 总入口、交叉引用与静态复核 | complete | 串联实现文档并通过覆盖、链接、围栏、格式和术语一致性检查 |
+
+## Rust runtime 架构固化阶段（2026-08-04）
+
+| 阶段 | 状态 | 说明 |
+| --- | --- | --- |
+| V. Runtime 实现语言决策 | complete | 固定 Rust native staticlib、versioned C ABI、panic/status 和 Bingo tracing GC 边界 |
+| W. 标准库实现分层 | complete | 固定 Rust primitives、self-hosted TypeScript 和 external engine 三层 |
+| X. 构建与链接契约 | complete | 固定 target/profile archives、runtime lock、capability closure、deterministic LLD response/link |
+| Y. 路线图与门禁同步 | complete | 更新 architecture/spec/backlog/testing/process/maintenance/git 文档 |
+| Z. 静态一致性复核 | complete | 链接、围栏、格式、旧假设和 diff 检查通过；未实现 runtime 代码 |
+
+## Phase 1 Foundation 与前端实现（2026-08-04 至 2026-08-05）
+
+以下表格保留 Phase 1 在方向审计前、按原验收契约得到的历史状态；`complete` 只表示 `FND-001..003`、`FE-001..007` 原门禁通过，不表示 snapshot 已可在 AST/checker release 后直接 lower。
+
+| ID | 状态 | 实现范围 | 独立验收（在 `typescript-go` 目录运行） |
+| --- | --- | --- | --- |
+| `FND-001` | complete | CLI 骨架与完整 toolchain/schema provenance | `go test ./internal/tsfrontend -run '^TestCanonicalBuildInfoJSONIsStableAndComplete$' -count=1`; `go test ./cmd/ts2bin -run '^TestVersionJSONContainsLockedProvenance$' -count=1` |
+| `FND-002` | complete | `bingoOptions` 默认值、profile、canonical digest、严格校验与未知字段拒绝 | `go test ./internal/tsfrontend -run '^TestNormalizeOptions' -count=1`; `go test ./internal/tsfrontend -run '^TestCheckRejectsUnknownBingoOption$' -count=1` |
+| `FND-003` | complete | 稳定诊断 registry、分类、排序和去重 | `go test ./internal/tsfrontend -run '^TestDiagnostic' -count=1`; `go test ./internal/tsfrontend -run '^TestSortAndDeduplicateDiagnosticsUsesStableContract$' -count=1` |
+| `FE-001` | complete | tsconfig -> CompilerHost -> Program -> canonical diagnostic facade | `go test ./internal/tsfrontend ./cmd/ts2bin -run '^TestCheck' -count=1` |
+| `FE-002` | complete | checker 独占借用与 panic-safe release | `go test -race ./internal/tsfrontend -run '^TestWithCheckerForFile' -count=1` |
+| `FE-003` | complete | pointer-free snapshot、稳定 ID/hash、校验与 determinism CLI | `go test ./internal/tsfrontend -run 'Deterministic' -count=1`; `go test ./cmd/ts2bin -run '^TestSnapshotVerifiesDeterminismAndWritesJSON$' -count=1` |
+| `FE-004` | complete | type/signature/symbol/overload/narrowing/generic semantic facts 与 fixture semantic digest | `go test ./internal/tsfrontend -run '^TestFrontendConformanceFixtures$' -count=1`; `go test ./internal/tsfrontend -run '^TestSnapshotCapturesGenericCallInstantiation$' -count=1` |
+| `FE-005` | complete | 351-row Kind inventory、真实 gate handler registry、subset gate、194 evidence 与 157 exemption | `go test ./internal/tsfrontend/kind_manifest_gen ./internal/tsfrontend -run 'Kind' -count=1`; `go test ./internal/tsfrontend -run '^TestRunSubsetGate' -count=1` |
+| `FE-006` | complete | Program-resolution ModuleGraph、canonical path、edge 分类与 eager SCC | `go test ./internal/tsfrontend -run 'ModuleGraph' -count=1` |
+| `FE-007` | complete | 351/4,893/108/100 compatibility baseline、lock drift、API variant 与安全原子更新 | `go test ./internal/tsfrontend ./cmd/ts2bin -run 'Compatibility' -count=1` |
+
+该轮冻结时的门禁矩阵：`go test ./...`、`go test -race ./internal/tsfrontend ./cmd/ts2bin`、`go test -shuffle=on ./...`、`go test -count=20 ./internal/tsfrontend ./cmd/ts2bin`、`go vet ./...`，以及 `version --json`、`test --stage frontend --json`、`doctor --json`、`compatibility --json` 四个 CLI smoke 当时全部通过。2026-08-05 审计后，阶段退出状态改为 `conditional pass`。
+
+## Phase 1.5 与调整后主链（2026-08-05）
+
+`IR-007a` 先冻结 JavaScript `number=f64`、NaN/-0/`+` 和 C ABI bit-observation contract；`IR-001a` 的 number-only 实现只在 Phase 1.5 前置项关闭后启动。完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 Phase 2A real-LLVM 纵切反馈。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request，Phase 2A 必须先经 `ResolveTargetContext` 绑定 toolchain/runtime manifests、DataLayout 和 CapabilitySet，MIR/backend 不得直接消费它。
+
+| ID | 当前状态 | 结果/退出条件 |
+| --- | --- | --- |
+| Direction audit | complete | 保留总体架构；结论 `conditional pass / parent delivery pending`；阻断证据和调整后的依赖已写入审计报告/backlog |
+| CLI/profile fix | complete | 未显式 override 时保留完整 `bingoOptions`；显式 `--profile` 只改变 profile；定向测试通过 |
+| Assertion proof bridge | complete | assertion chain、non-null、representation/flow proof 已进入 snapshot，并由 wire 独立重算、corruption negative 和 round-trip regression 闭合 |
+| `FND-004` | implemented / acceptance-blocked | 最终 patch/hash 已生成，`doctor -Quiet` 恢复 materialized-exact，官方 remote shallow clean checkout apply 后全仓 test/vet 与 cleanup 通过；只剩把正确 gitlink/lock/patch/scripts 纳入获授权的 parent commit，才能严格证明 parent HEAD clean clone |
+| `FE-008` | complete | Kind-driven payload/role/arity registry、单一 `frontendwire` serialized validator、rooted-path fail-closed 门禁与原 overlay 负例已实现；核心、race、shuffle/repeat、全仓 regression 通过 |
+| `FE-009` | complete | per-specifier binding、callee effect closure、exhaustive registry、lowerer facts、ownership/redirect 负例和 wire round-trip 已实现；serialized validator 双写已移除，核心与全仓 regression 通过 |
+| `FE-010` | complete | checker-free dependency closure、独立进程重复输出、显式 evaluation-order/single-block HIR 与 tamper post-verifier 已通过；migration baseline/golden regression 已闭合 |
+| `FE-011` | complete | source-level target split、三项 TS options、Windows/WSL identity、跨盘/UNC/POSIX rooted path fail-closed、profile/cache regression 和 validated FrontendSnapshot binding 已通过 |
+| `FE-011b` | complete | canonical `exceptions=none` 已迁移 default options、lock、BuildPlan 与 golden；`llvm-eh` 只保留为未来 capability 并 fail closed，status-code/native-unwind 后续独立锁定 |
+| `IR-000` | complete | executor/fixed-point/budget/pre-post/effect/dump golden 与 validate-snapshot -> typed-HIR production prefix 已通过核心、race、frontend stage 和全仓 regression；typed HIR 之后的 TargetContext/handlers 与真正 MIR verifier属于 Phase 2A |
+| Phase 2A: `IR-007a`, `IR-001a..005a`, `BE-001a`, `RT-002a`, `TC-001a`, `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | blocked | 先冻结 f64/NaN/-0/`+`，并行建立 Go-LLVM/TargetMachine 与 Rust startup scaffold；随后以 manifest 绑定 TargetContext，再实现 number/参数/加法/单 block return 的 HIR/MIR/verifier、固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential |
+| Phase 2B: primitive control flow | blocked | Phase 2A 通过后再扩 bool、变量、调用、CFG、string/null/undefined 和单次求值消糖 |
+| `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |
+| Broad Phase 2+ | blocked | 第一真实纵切通过后再扩对象/runtime/modules/generics/EH/async/第二目标 |
+
+当前验证备注：`go list -deps ./cmd/ts2bin-replay` 已证明 production replay 不携带 parser/checker/AST；核心六包、`go test -race` 核心六包、`go vet ./...`、frontend 九阶段脚本（含 race/shuffle/repeat）和 `go test ./... -count=1` 均通过。前端 baseline/golden 的有意 UTF-8 DTO 变化已人工审查并由专门 round-trip 测试锁定；全仓 Windows watcher 本轮也通过。patch SHA-256 `759e0661a91c7b757a78106425618046dc0b8e348f2c1e31263f486c074a9c9f` 已通过 doctor、官方 remote clean checkout apply/full test/vet 和 WSL Go-LLVM/Rust+LLD smoke。唯一未关闭的是未获授权的 parent commit/HEAD clean-clone 证明；不要重复开发已存在的 registry/executor，也不要在该交付门前进入 Phase 2B。

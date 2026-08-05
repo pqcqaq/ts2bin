@@ -1,6 +1,6 @@
 # ts2bin Git 与提交规范
 
-本文规定父仓库、typescript-go submodule、分支、提交、变更集和发布标签的使用方式。目标是让每个提交可审查、可回滚、可二分，并能准确还原 tsgo、标准库、Bingo schema、runtime ABI 和 LLVM 版本组合。
+本文规定父仓库、typescript-go submodule、Rust runtime、分支、提交、变更集和发布标签的使用方式。目标是让每个提交可审查、可回滚、可二分，并能准确还原 tsgo、标准库、Bingo schema、Rust runtime、runtime ABI 和 LLVM 版本组合。
 
 当前父仓库刚初始化，尚无历史提交可供模仿；在首个提交建立后，后续提交必须先检查历史风格，再遵循本文件和仓库已有约定。typescript-go 是独立上游仓库，不在父仓库内直接提交其源码修改。
 
@@ -22,6 +22,7 @@ ts2bin (parent repository)
 - 更新 submodule 前必须确认子仓库工作树干净；禁止用 git add -f 把子仓库文件提升到父仓库。
 - git submodule status、git diff --submodule=log 和子仓库 git status 是 submodule 变更的必查证据。
 - 构建和发布必须使用 lock 文件、submodule SHA 和 stdlib manifest hash，不能依赖开发机当前 checkout 的模糊分支。
+- Rust runtime 必须锁定 `rust-toolchain.toml`、`Cargo.lock`、Cargo features、target 和 archive digests；runtime source、生成 header/layout/capability 和锁文件应作为一个可审计变更闭包。
 
 ## 2. 分支规范
 
@@ -32,7 +33,7 @@ feat/FE-003-program-snapshot
 fix/IR-005-mir-verifier
 test/REL-003-cleanup-fuzz
 docs/process-and-commit-standards
-deps/UP-001-tsgo-5b1047d
+deps/UP-001-tsgo-12318e5
 release/v0.1.0
 hotfix/runtime-abi-1
 ~~~
@@ -179,6 +180,7 @@ git diff --submodule=log
 发布提交必须包含：
 
 - ts2bin 版本、submodule SHA、stdlib manifest hash、Bingo schema、runtime ABI 和 LLVM major。
+- Rust toolchain、Cargo.lock/features、每个 target/profile runtime archive digest 和 LLD version。
 - static/dynamic/experimental profile 列表及能力差异。
 - conformance、differential、LLVM verifier、目标平台和 reproducible build 报告。
 - 已知限制、迁移说明、回滚版本和安全公告（如适用）。

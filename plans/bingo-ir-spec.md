@@ -59,17 +59,20 @@ FuncRef(signatureRep), DynamicValue
 
 TsType 与 RepType 是多对一关系。例如多个字符串 literal 都映射 `Utf16String`；`Dog | null` 可映射 `NullableRef(Dog)`；`string | number` 通常映射 `TaggedUnion`，不能裸用 LLVM union bitcast。
 
-### 3.3 类型规范化
+### 3.3 类型与表示规划
 
-MIR 前按顺序执行：
+类型规划不得把 source type normalization、generic specialization 和 target representation 合成一次前置扫描。唯一顺序为：
 
-1. 展开 alias，保留 alias provenance。
-2. 实例化 generic/conditional/mapped/indexed type。
-3. 消除 literal freshness，保留 discriminant 常量。
-4. 计算 union/intersection canonical member set。
-5. 计算 variance 和 mutability。
-6. 选择 RepType/layout/GC strategy。
-7. 生成 adapter/checked cast 或拒绝。
+1. 从 snapshot 建立 target-independent `SourceTypePlan`：展开 alias 并保留 provenance，规范化 checker 已求值的 conditional/mapped/indexed type，保留尚未实例化的 generic work item。
+2. 消除 literal freshness但保留 discriminant 常量，计算 union/intersection canonical member set、source variance 和 mutability proof。
+3. 用 `SourceTypePlan` 生成 typed HIR，完成求值顺序和语义消糖。
+4. 运行 specialization worklist 到 fixed point；每个新实例重新进入同一 canonical registry，直到没有新 work item 或触发预算诊断。
+5. 对 specialized HIR 验证 variance、aliasing 和 conversion，生成 adapter/checked cast 或拒绝。
+6. Phase 2A 调用 `ResolveTargetContext(BuildPlan, toolchain manifest, runtime manifest)`，把 `canonical`、未解析的 backend request 解析为不可变目标上下文；缺失或不兼容项在此 fail closed。
+7. 结合已解析 `TargetContext` 建立 `RepresentationPlan`，选择 RepType、layout、calling convention 和 GC pointer map。
+8. 使用冻结的 representation/effect contract 进入 MIR CFG/SSA 与 final verifier。
+
+target、layout 或 GC strategy 不得进入 raw frontend snapshot/`SourceTypePlan` hash。`BuildPlan` 只记录规范化请求，不拥有 `TargetContext`；target-dependent `RepresentationPlan`、MIR 和 artifact cache key 必须绑定 `TargetContext` 及其 toolchain/runtime manifest hashes。
 
 ## 4. HIR 模块与定义
 
@@ -236,24 +239,26 @@ reason, requiredCapability
 
 `as any as T` 没有显式 provenance 入口，因此 static/unsafe profile 都不能悄悄放行。只有 `unsafeCast<T>` intrinsic 或 FFI manifest 能创建 `explicit_unsafe_cast`。
 
-## 9. HIR -> MIR normalization passes
+## 9. 唯一 pass/effect DAG
 
-固定 pass 顺序：
+固定顺序与 [implementation-specification.md](implementation-specification.md) 一致：
 
-1. `ResolveCompileOnlyTypes`
-2. `SpecializeGenerics`
-3. `ValidateVarianceAndMutability`
-4. `LowerAssertionsAndConversions`
-5. `LowerOptionalAndLogical`
-6. `LowerPatternsAndSpread`
-7. `LowerClassesAndClosures`
-8. `LowerIteratorsAndResources`
-9. `LowerExceptionsAsyncGenerators`
-10. `SelectLayoutsAndCallingConventions`
-11. `BuildCFGAndSSA`
-12. `VerifyMIR`
+1. `ValidateSnapshotAndBuildSourceTypePlan`
+2. `LowerSnapshotToTypedHIR`
+3. `LowerEvaluationOrderAndSemanticSugar`
+4. `ResolveCompileOnlyTypesAndSpecializeToFixedPoint`
+5. `ValidateVarianceAliasingAndConversions`
+6. `ResolveTargetContext`
+7. `BuildTargetRepresentationPlan`
+8. `LowerHIRToMIRCFGAndSSA`
+9. `LowerCleanupExceptionAndAsyncState`
+10. `VerifyStructuralMIR`
+11. `BindCapabilitiesAndFreezeExactEffects`
+12. `OptimizeProvenMIR`
+13. `PlaceGCRootsAndFreezeCleanup`
+14. `VerifyFinalMIR`
 
-pass 不得改变可观察求值顺序。每个 pass 可以单独 dump/diff，并有 golden。
+`ResolveTargetContext` 是 Phase 2A 的 target-dependent 门，不是普通 HIR rewrite；它消费 `BuildPlan` 和锁定 toolchain/runtime manifests，后续表示/MIR pass 只消费其结果。每个 pass 都声明输入 schema、输出 schema、读取/新增的 fact 和是否会引入 call/safepoint/throw/suspend。pass 不得改变可观察求值顺序；effect freeze 后不得引入新 capability/safepoint/throw，root placement 后不得运行会隐藏引用 lifetime 或引入新 safepoint 的 MIR pass。每步可独立 dump/diff，且有正常、malformed 和循环 specialization golden。
 
 ## 10. Verifier 规则
 
@@ -323,15 +328,13 @@ const animals: ReadonlyArray<Animal> = dogs;
 
 ## 13. 序列化与兼容性
 
-HIR/MIR 文本和二进制格式都包含：
+HIR 与 MIR 使用分层 provenance：
 
 ```text
-schema version
-typescript-go commit
-compiler/profile/config digest
-runtime ABI/capability digest
-target triple/data layout
-source content hashes
+HIR: schema version, typescript-go commit, FrontendSnapshot/source hashes
+MIR: HIR provenance + BuildPlan digest + TargetContext hash
+     + toolchain/runtime/ABI/layout/capability manifest digests
+     + resolved target triple/data layout
 ```
 
 reader 只保证读取同一 major IR version。缓存命中必须比较全部 digest；不能只比较源文件时间戳。

@@ -2,11 +2,11 @@
 
 ## 环境
 
-- 工作目录：`D:\Develop\Projects\ts2bin`
-- 当前目录已初始化为 Git `main` 分支，但尚无提交历史；首个提交按本项目规范建立风格，后续提交必须先检查已有历史。
-- Node.js：`v22.19.0`。
+- 工作目录：`D:\Develop\git\ts2bin`。
+- 当前父仓库位于 `main`，审计时 HEAD 为 `5f44799d9f6c1fa0770f26dcd811180f9afa721b`，已有 5 个提交且与 `origin/main` 对齐。
+- Node.js：`v22.22.0`；Go：`1.26.0`；Rust：`1.97.1`。
 - npm registry 当前 TypeScript 稳定版：`7.0.2`（查询日期：2026-08-03）。
-- `typescript-go/` 已作为 Git submodule 纳入父仓库；当前分支 `main`，gitlink 提交 `5b1047d10d32e7d5b446be4de56b126ff42f82bb`（2026-07-31），工作树保持干净。
+- `typescript-go/` 已作为 Git submodule 纳入父仓库；父仓库暂存的 gitlink 和 lock 都指向上游 `12318e599d21f516defea3b20e5d44b9369da723`，内部版本为 `7.1.0-dev`。Phase 1 代码仍是 submodule 内 dirty/untracked 修改，`.gitmodules` 仍指向微软官方 remote，因此 clean clone 尚不能复现该实现；这是 `FND-004` 阻断项。
 - 直接执行 `npx tsc` 会命中 npm 上名为 `tsc` 的占位包，校验应使用 `npx -p typescript@latest tsc` 或项目本地依赖。
 
 ## 官方资料
@@ -33,7 +33,7 @@
 - 当前库集合覆盖 ES5、ES2015–ES2025 与 ESNext，并包含 decorators、disposable、Temporal、Float16、iterator helpers 等分项声明。
 - `lib.dom*`、`lib.webworker*`、`lib.scripthost.d.ts` 是宿主环境 API，不属于 ECMAScript 语言标准；本任务的“ES 内置类型”不把它们混入标准库清单。
 - `_submodules/TypeScript` 当前未初始化（`git submodule status` 前缀为 `-`），但 `internal/bundled/libs/` 已包含编译器实际捆绑的完整声明，可直接作为基线。
-- `typescript-go` README 表示解析/扫描与类型解析目标和 TypeScript 6.0 相同，语言服务仍在推进；因此不能把原生端实现进展误写成新的 7.0 语言语法。
+- 当前锁定的 `typescript-go 7.1.0-dev` README 表示 program/parsing/type checking 的兼容目标仍是 TypeScript 6.0；因此不能从原生端版本号推断新的 7.x 语言语法。项目基线同时锁定 commit、stdlib hash 和 `FE-007` semantic fixtures，不能只依赖这句 README 声明。
 - TypeScript 6.0 默认值：`strict: true`、`module: esnext`、`target` 浮动到最新受支持 ES（当时为 ES2025）、`noUncheckedSideEffectImports: true`、`libReplacement: false`。
 - TypeScript 6.0 中 `rootDir` 默认改为配置文件目录，`types` 默认改为 `[]`；7.0 原生端会移除 6.0 已弃用的旧选项。
 - 实际 `lib.es*` 功能声明共覆盖 ES5、ES2015–ES2025 和 ESNext 分项；聚合 `lib.es20xx.d.ts`/`full` 文件主要用三斜线引用，不应重复统计。
@@ -100,3 +100,14 @@
 - tsgo 对显式 `out`、`in` 直接采用声明方差；类型参数关系比较按 covariant 正向、contravariant 反向、bivariant 任一方向、invariant 双向执行，unmeasurable 只接受 identity/完全相同。
 - tsgo 将 `Array`、`ReadonlyArray` 和 tuple 统一走预置 covariance 快路径，且源码明确承认“pretend array is covariant”；Bingo 必须在可写位置重新计算 layout variance，把 mutable Array/tuple 视为 invariant。
 - tsgo emitter 顺序为 metadata（可选）→ type erasure → import elision → enum/namespace/parameter-property runtime syntax → legacy decorators → JSX → ES downlevel → use strict → module → const-enum inline；该顺序只用于行为 oracle，Bingo 使用独立 typed HIR/MIR pass。
+
+## Rust runtime 与链接决策（2026-08-04）
+
+- `bingo-rt` 的目标实现语言固定为 Rust；Go 继续负责 tsgo facade、Bingo compiler 和 LLVM backend，不进入最终用户进程的 runtime core。
+- Rust runtime 按 target/profile 预编译为原生 `.a`/`.lib`，LLVM 生成代码只调用版本化 `extern "C"` ABI，最终由 LLD 链接 startup、用户/stdlib objects、所需 Rust archives 和显式 host libraries。
+- 首版不发布 Rust bitcode ABI，不启用跨语言 LTO；rustc 与内部 LLVM metadata 不是稳定的跨版本 runtime 契约。
+- Rust panic 不表示 TypeScript exception。release runtime 使用 `panic=abort`，导出 helper 以 status/exception handle 返回失败，再由 Bingo MIR 进入 throw/finally/cleanup 边。
+- Bingo 继续拥有独立的非移动 tracing GC。Rust `Gc<T>` 不是 root，跨 MayAllocate/MaySuspend/host call 必须使用编译器 root slot 或 runtime `Root<T>`；Bingo heap object 不由 Rust `Drop` 释放。
+- 标准库实现采用三层：Rust native primitives、受限 TypeScript self-hosted algorithms、BigInt/RegExp/ICU/Temporal 等可选 engine adapters。泛型 self-hosted 代码以锁定的 verified HIR/package 分发并按需实例化。
+- Rust `unsafe` 只允许集中在 ABI、GC、layout、原子、TLS、平台和外部 engine FFI 边界；公共 ABI 禁止暴露 Rust 引用、容器、trait object、future 或默认布局 enum。
+- 正式发布随 CLI 携带锁定 Rust toolchain/Cargo.lock/features/target 构建的 archive、capability/layout manifest 和 runtime lock；开发模式本地 runtime build 必须以完整 hash 隔离缓存。

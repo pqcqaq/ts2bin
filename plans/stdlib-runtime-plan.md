@@ -1,6 +1,8 @@
 # ECMAScript 标准库与 Bingo Runtime 规划
 
-`handbook/stdlib/` 已按本地 `typescript-go/internal/bundled/libs/` 整理 ES5、ES2015–ES2025、ESNext 的声明和完整成员索引。本文件把这些“编译期可见 API”映射成 ts2bin 可执行的 runtime 能力，避免把 `.d.ts` 当作实现。
+`handbook/stdlib/` 提供按 `typescript-go/internal/bundled/libs/` 整理的 ES5、ES2015–ES2025、ESNext 声明索引，但其当前文本最初生成于旧 checkout。编译与发布必须从 `ts2bin.lock.json` 锁定的 stdlib hash 重新生成 declaration/capability manifest；手册索引只作导航。本文件把这些“编译期可见 API”映射成 ts2bin 可执行的 runtime 能力，避免把 `.d.ts` 当作实现。
+
+标准库的目标实现采用三层结构：Rust native primitives、受限 TypeScript self-hosted algorithms、可选重型 engine/host adapters。Rust crate、`extern "C"` ABI、GC handle 和 LLD 链接细节以 [rust-runtime-and-linking.md](rust-runtime-and-linking.md) 为准。
 
 ## 1. 三个独立版本面
 
@@ -44,6 +46,8 @@ TypeScript lib declaration
 ```
 
 每个 capability 保存：声明全名、签名 hash、最低 lib、实现状态、依赖、异常/分配 effect、target 限制和测试 fixture。manifest 由标准库索引脚本和 runtime 导出表交叉生成，CI 不允许只改一边。
+
+每项还必须记录 `implementationKind`：`intrinsic`、`rust-native`、`self-hosted`、`external-engine`、`host-ffi` 或 `dynamic-only`。`rust-native` 指向 target archive/symbol，`self-hosted` 指向锁定 HIR package/function，二者都必须进入 capability 和 artifact hash。
 
 状态：
 
@@ -157,18 +161,31 @@ typed declaration (.d.ts)
 ## 6. Runtime ABI 分层
 
 ```text
-abi/core.h       primitive, string, object header, allocation, error
-abi/collections  array, map, set, iterator
-abi/async        promise, scheduler, async iterator
-abi/resource     dispose, suppressed error
-abi/reflect      symbol, proxy, property descriptor
-abi/intl         ICU/locale/temporal external boundary
-abi/host         Node/browser/FFI adapters
+bingo-abi          primitive, repr(C), status, descriptor, generated header
+bingo-memory       allocation, tracing GC, root, write barrier
+bingo-core         string, object, array storage, symbol, error
+bingo-collections  map, set, weak collections, iterator storage
+bingo-async        promise, scheduler, async iterator handles
+bingo-resource     dispose, suppressed error
+bingo-regexp/intl  optional engine and data adapters
+bingo-platform     host, thread, TLS, EH and FFI adapters
 ```
 
-每层单独有 ABI version 和 feature flag。`rt.*` intrinsic 只能引用声明中存在的层；链接器在最终阶段检查完整闭包。
+这些层在 workspace 内构建为 `rlib` 依赖图，并由一个 `bingo-runtime` umbrella crate 产生当前 target/profile/feature set 唯一的 Rust native `staticlib`；各层保留独立 capability/ABI schema，但不得各自产生携带重复 Rust allocator/panic/runtime symbols 的 `staticlib`。BigInt、RegExp、ICU 等重型第三方 engine 可以作为 capability 明确记录的独立原生 archive。`rt.*` intrinsic 只能引用声明中存在的层；链接器在最终阶段检查完整闭包。跨边界只使用生成的版本化 C ABI，不暴露 Rust ABI。
 
-## 7. 标准库 lowering 规则
+## 7. 实现语言与自举分工
+
+| 实现层 | 典型职责 | 原因 |
+| --- | --- | --- |
+| LLVM/MIR intrinsic | 已证明语义等价的 f64/整数/位运算和检查 | 避免无意义调用，但必须保留 NaN、负零和异常语义 |
+| Rust native | GC、内部槽、UTF-16 storage、ArrayBuffer、hash/equality、Symbol、exception、microtask | 需要内存、平台或 collector 能力；unsafe 可集中审计 |
+| Self-hosted TypeScript | Array/String 高阶算法、Set composition、Iterator Helpers、Promise combinator、DisposableStack | 更接近 ECMAScript 算法、复用泛型和普通 lowering/verifier |
+| External engine | BigInt、ECMAScript RegExp、ICU/Intl、timezone/Temporal | 规范面和数据量过大，必须锁定成熟实现与数据版本 |
+| Dynamic/host adapter | Proxy、开放反射、DOM/Node/Deno/Bun | 不属于 static 固定布局核心 |
+
+self-hosted stdlib 以锁定、已验证的 Bingo HIR/package 随编译器分发。泛型方法在用户构建时按需单态化或走 descriptor-shared ABI，并进入 deterministic cache；不得为所有可能的 `Array<T>` 预编译 Rust 函数，也不得把 self-hosted 包绕过 verifier 视作可信机器码。
+
+## 8. 标准库 lowering 规则
 
 1. **纯函数/数值**：优先 intrinsic/LLVM instruction，必须证明 NaN、Infinity、-0 和 rounding 一致。
 2. **已知 shape 的对象方法**：静态 direct call 或 vtable slot；保存 getter/override 语义。
@@ -177,7 +194,9 @@ abi/host         Node/browser/FFI adapters
 5. **dynamic/Proxy/Reflect**：进入 DynamicValue，保留 property key 和 trap effect；static 直接拒绝。
 6. **compile-only 工具类型**：`Partial`、`Pick`、`Omit`、`Awaited`、`NoInfer` 等由 checker 求值，零 runtime 成本。
 
-## 8. Capability 测试
+lowering 在选择 runtime call 前必须读取 `implementationKind`。`rust-native` 绑定版本化 symbol；`self-hosted` 解析锁定 HIR function 并加入 specialization graph；`external-engine` 递归加入 archive、data 和 license capability；任一 hash/profile/target 不匹配都在链接前拒绝。
+
+## 9. Capability 测试
 
 每个 runtime symbol 至少有：
 
@@ -187,3 +206,6 @@ abi/host         Node/browser/FFI adapters
 - runtime behavior：Node/标准测试 oracle 或规范化输入输出。
 - LLVM link：intrinsic 符号存在、ABI hash 一致。
 - memory/effect：alloc、throw、suspend、GC root、write barrier 检查。
+- Rust boundary：`repr(C)` layout、导出 symbol、panic/status 和 unsafe contract 测试。
+- self-hosted：HIR/MIR golden、generic specialization determinism 和 Node/Test262 differential。
+- link closure：只选择唯一 umbrella runtime 和所需 external-engine archives，错误 target/ABI/Cargo feature/archive hash 或重复 runtime symbol 必须在发布前失败。

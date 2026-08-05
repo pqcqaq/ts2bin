@@ -13,23 +13,14 @@ typescript-go/
   internal/ast2bingo/
   internal/bingo/...
   internal/llvmbackend/
-  runtime/bingo-rt/
+  runtime/bingo-rt/       # Rust workspace and target staticlibs
 ```
 
 `internal/tsfrontend` 是唯一允许同时导入 `internal/ast`、`internal/checker`、`internal/compiler` 和 `internal/tsoptions` 的 ts2bin 包。其他 Bingo 包只能读取 snapshot DTO。
 
-版本锁文件建议为 `ts2bin.lock.json`：
+版本和语义基线只以仓库根目录的 `ts2bin.lock.json` 为准，不在规格中复制手写版本号或 commit。当前锁定 checkout 是 `typescript-go 7.1.0-dev`，但版本字符串不能替代 Kind/API/stdlib/semantic compatibility baseline；每次升级都必须由 `FE-007` 生成差分。
 
-```json
-{
-  "typescriptGoCommit": "5b1047d10d32e7d5b446be4de56b126ff42f82bb",
-  "typescriptSemanticBaseline": "6.0",
-  "stdlibManifestVersion": 1,
-  "bingoIrVersion": 1,
-  "runtimeAbiVersion": 1,
-  "llvmMajor": 20
-}
-```
+`FND-004` 当前采用过渡 patch 交付：lock 记录 `upstreamCommit`、官方 remote、patch path/base/SHA-256 和 stdlib hash，doctor 重建工作树 binary diff 并要求与 patch hash 完全一致，验证脚本从 remote shallow-fetch 锁定 commit 后 apply/test/vet。最终 patch 已恢复 materialized-exact，官方 remote clean checkout full test/vet/cleanup 与 WSL smoke 通过；最后只需在获授权后提交 lock、patch、脚本和正确 gitlink，并从该 parent HEAD clean clone 重跑完整验收。后续若迁移到 fork commit，再同时锁定可获取的 fork remote/commit，不能退回官方 submodule 加未记录 dirty state。
 
 上游同步时按顺序运行：tsgo 全量测试、前端 snapshot golden、AST Kind 覆盖、标准库 manifest diff、Bingo conformance。任何一步变化都要分类为“上游语义变化、适配器变化、预期新增能力或回归”。
 
@@ -51,7 +42,7 @@ read tsconfig text
 约束：
 
 - `cwd`、config path、source file path 全部规范化为绝对路径。
-- `SourceFile.FileName()` 作为 canonical path 输入，再由 frontend 分配稳定 `FileId`。
+- `SourceFile.FileName()` 作为 canonical path 输入，再由 frontend 按实际 filesystem identity 分配稳定 `FileId`。只有明确大小写不敏感的 filesystem 才允许 case-fold；Linux 等大小写敏感环境必须把 `A.ts` 与 `a.ts` 视为不同文件。
 - `bundled.LibPath()` 只决定声明文件来源，不代表 bingo-rt 已实现对应 API。
 - project references、package.json exports/imports、Node ESM/CJS 判定全部复用 Program，不在 ts2bin 重写解析器。
 - watch/incremental 模式使用 `UpdateProgram`/`ReuseProgram` 前先建立单独设计；首版 batch compiler 不混入可变 Program 生命周期。
@@ -95,28 +86,40 @@ parallelLower(snapshots)
 - 在 goroutine 间共享同一次 checker acquisition。
 - 在 release 之后调用 `TypeToString` 或查询 symbol/type。
 - 假设两个文件一定关联同一个 checker。
+- 在内部 helper 中 `recover` 后返回 nil/false/空切片并继续生成 snapshot；checker query panic/error 必须上浮到 capture 边界，转换为不可抑制的 internal diagnostic。
 
 优化顺序应是“按 checker/file 分组串行 snapshot -> immutable snapshot 并行 lowering”，而不是并行调用同一个 checker。
 
 ## 5. Frontend facade
 
-建议暴露以下内部接口：
+schema v2 已在 capture 源头剥离 backend-only fields，并以 `FrontendSnapshot`/`BuildPlan` wrapper 绑定 target-independent frontend key 与 `canonical`、未解析的 backend request。`FE-011a` 不再重做该拆分；它负责在 wire validator 收敛后关闭 target/path/profile/cache regression 和 clean-clone evidence。目标 API 形态保持为：
 
 ```go
 type Frontend interface {
-    Build(ctx context.Context, req BuildRequest) (*ProgramSnapshot, []Diagnostic)
+    Build(ctx context.Context, req FrontendRequest) (*FrontendSnapshot, []Diagnostic)
 }
 
-type BuildRequest struct {
-    ConfigPath string
-    Profile    Profile
-    Target     TargetSpec
-    Runtime    CapabilitySet
+type FrontendRequest struct {
+    ConfigPath    string
+    SourceProfile Profile
 }
 
-type ProgramSnapshot struct {
+type BackendRequest struct {
+    Target        TargetSpec
+    CPU           string
+    Features      []string
+    Runtime       RuntimeSelection
+    GC            GCMode
+    Exceptions    ExceptionMode
+    Overflow      OverflowMode
+    BoundsCheck   BoundsCheckMode
+    Emit          []ArtifactKind
+    LLVMMajor     int
+}
+
+type FrontendSnapshot struct {
     SchemaVersion uint32
-    Config        ConfigSnapshot
+    FrontendConfig FrontendConfigSnapshot
     Files         []FileSnapshot
     Modules       []ModuleSnapshot
     Types         []TypeSnapshot
@@ -125,7 +128,19 @@ type ProgramSnapshot struct {
     Diagnostics   []Diagnostic
     ContentHash   Digest
 }
+
+type BuildPlan struct {
+    SchemaVersion uint32
+    FrontendHash  Digest
+    Profile       Profile
+    Backend       BackendRequest
+    ContentHash   Digest
+}
 ```
+
+`FrontendSnapshot.ContentHash` 只受 source、会改变前端语义的 tsconfig、source profile、锁定 tsgo/stdlib 和 snapshot schema 影响。target triple、CPU/features、runtime、GC、EH、bounds、emit 等进入 `BuildPlan`；`BuildPlan` 只冻结规范化请求及其 hash，不包含已解析 capability、data layout 或已选择 archive。即使内部 API 名为 `ResolveBuildPlan`，这里的 resolve 也只表示默认值解析和 canonicalization。
+
+Phase 2A 必须在 `RepresentationPlan`/MIR 前执行 `ResolveTargetContext(BuildPlan, toolchain manifest, runtime manifest)`。只有该步骤可以证明 target/CPU/features、LLVM major、ABI/layout、GC/EH profile 和 runtime 实现可用；完整 artifact cache key 组合 frontend hash、build-plan hash、`TargetContext` hash 与 runtime/ABI/layout hashes。
 
 具体 facade 方法仅在实现包内部使用：
 
@@ -154,7 +169,7 @@ constantValueOf(node)
 
 | ID | 构造方式 |
 | --- | --- |
-| `FileId` | canonical path + project identity |
+| `FileId` | filesystem-aware canonical path + project identity；case fold 由 host/filesystem 能力决定 |
 | `NodeId` | FileId + Kind + source span + deterministic occurrence |
 | `SymbolId` | declaration set + escaped name + parent SymbolId |
 | `TypeId` | frontend build 内部 dense id；持久化另存 canonical type hash |
@@ -176,11 +191,15 @@ RootNodes[], Imports[], Exports[]
 ### 6.3 NodeSnapshot
 
 ```text
-NodeId, Kind, Span, ParentId, ChildIds[]
+NodeId, Kind, Span, ParentId
+NamedChildren[] = {Role, ChildId}
+SyntaxPayload = tagged payload for this Kind
 DeclaredTypeId, NarrowedTypeId, ContextualTypeId
 SymbolId, ResolvedSymbolId, SignatureId
 ConstantValue, ModifierBits, EvaluationFlags
 ```
+
+`SyntaxPayload` 至少覆盖 identifier/private name、operator/token、literal raw/cooked value、property access kind、argument/type-argument roles、import/export specifier、binding pattern、class/member initialization 和首批 S0/S1 lowering 所需的 source blob 引用。consumer 必须按 `{schemaVersion, payloadTag}` 解码；未知 tag 产生稳定 frontend diagnostic，不能退回位置相关 AST 查询或猜测 `Children[]` 顺序。
 
 不序列化 tsgo 内部 `FlowNode` 图。checker 已经在 `GetTypeAtLocation` 中应用 assignment、condition、call、loop 和 mutation 等 flow facts；NodeSnapshot 保存关键表达式处的 narrowed type，MIR builder 再按源结构建立自己的 CFG。
 
@@ -190,9 +209,11 @@ ConstantValue, ModifierBits, EvaluationFlags
 TypeId, TypeFlags, ObjectFlags
 Kind: intrinsic | literal | object | tuple | union | intersection |
       typeParameter | indexedAccess | conditional | mapped | template | error
+Payload: intrinsic/literal/template/tuple optional-rest/union tag/object identity
 SymbolId, AliasSymbolId
 ElementTypes[], TypeArguments[], BaseTypes[]
-Properties[], CallSignatures[], ConstructSignatures[], IndexInfos[]
+Properties[] = {readType, writeType, optional, readonly, accessor, privateIdentity}
+CallSignatures[], ConstructSignatures[], IndexInfos[]
 ConstraintTypeId, DefaultTypeId, Variance
 CanonicalHash, DebugText
 ```
@@ -202,12 +223,15 @@ CanonicalHash, DebugText
 ### 6.5 SignatureSnapshot
 
 ```text
-SignatureId, DeclarationNodeId, Flags
-ThisParameter, Parameters[], MinArgumentCount, HasRest
+SignatureId, DeclarationNodeId, Flags, Effects
+ThisParameter, Parameters[] = {type, optional, rest, name, initializerRole}
+MinArgumentCount, HasRest
 TypeParameters[], InstantiatedTypeArguments[]
 ReturnTypeId, TypePredicate
 SelectedOverloadIndex, CallingConventionClass
 ```
+
+`as`、angle-bracket assertion 和 `satisfies` 节点已保存 source/target type、assertion-chain provenance、checker assignability proof 和 representation proof；validator 与 subset gate 对缺失、悬空或不一致证据 fail closed。新增 assertion 形态时必须扩展同一 proof schema，不能退回单个布尔值。
 
 ## 7. tsconfig 兼容契约
 
@@ -243,13 +267,15 @@ SelectedOverloadIndex, CallingConventionClass
     "cpu": "generic",
     "features": [],
     "gc": "tracing",
-    "exceptions": "llvm-eh",
+    "exceptions": "none",
     "overflow": "js-number",
     "boundsCheck": "on",
     "emit": ["hir", "mir", "llvm", "obj"]
   }
 }
 ```
+
+上例是 Phase 2A 无异常首切的用户配置，不等于 frontend snapshot identity；`exceptions=none` 不得编译任何可抛路径。CLI 未显式传 override 时必须完整保留 `tsconfig.bingoOptions`；显式 `--profile` 只改 profile。Normalize 后再把 source-profile/front-end fields 与 target/runtime/build fields 分别写入 `FrontendSnapshot` 和未解析 `BuildPlan`；工具链/runtime 可用性留给 Phase 2A `ResolveTargetContext`。首个可抛异常 profile 仍按架构要求单独冻结为 status-code/result，`llvm-eh` 继续保持 unavailable。
 
 `gc=tracing` 是 general static profile 的默认值，因为普通对象、闭包和集合允许形成循环引用。`gc=arc` 只能由受限 profile 显式开启，并且必须经过无环、无弱引用、无 dynamic Proxy 的可证明性检查；无法证明时在 subset gate 报错，不得静默退化为泄漏语义。
 
@@ -296,3 +322,9 @@ DeferredEvaluation
 4. checker acquisition 泄漏测试：所有路径都调用 release。
 5. 并发测试：release 后 snapshot 并行处理，不并发访问 checker。
 6. tsgo commit 升级时 snapshot schema 和 canonical hash 差分。
+7. checker/AST 全部 release、snapshot JSON round-trip 后，只读取 snapshot 生成第一纵切 canonical lowering events/HIR。
+8. 大小写敏感 host 上 `A.ts`/`a.ts` 不碰撞；Windows/WSL 路径 identity、symlink 和盘符规则有 golden。
+9. 切换 target/CPU/GC/EH/emit 不改变 `FrontendSnapshot.ContentHash`，但必须改变 `BuildPlan.ContentHash` 和对应 artifact cache key。
+10. profile CLI override 覆盖单一字段，不得清空 runtime、target、CPU、features、GC、bounds 或 emit。
+11. 注入 checker query panic/error 时 capture fail closed；不得得到缺失 type/signature/symbol 后仍通过 subset gate 的 snapshot。
+12. bind diagnostic 保留 binding stage、span 和 multiplicity；不得只触发 bind 后丢弃结果并混入 semantic stage。

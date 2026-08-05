@@ -1,0 +1,11 @@
+[package]
+name = "ts2bin-smoke-runtime"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[profile.release]
+panic = "abort"

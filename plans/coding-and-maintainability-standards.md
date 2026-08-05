@@ -2,7 +2,7 @@
 
 本文规定 ts2bin 的代码组织、抽象边界、注释、公共 API 文档和可维护性要求。目标是让编译器核心流程能够被新维护者按顺序读懂、被审计者定位语义责任、被测试稳定复现。
 
-本规范适用于 Go 编译器代码、Bingo IR、runtime ABI/实现、LLVM backend、CLI、测试工具以及 TypeScript/JavaScript 测试 fixture。它与 [compiler-development-process.md](compiler-development-process.md) 配合使用；流程文档决定何时审计，本文件决定代码达到什么质量才能进入审计。
+本规范适用于 Go 编译器代码、Rust runtime、Bingo IR、runtime ABI/实现、LLVM backend、CLI、测试工具以及 TypeScript/JavaScript 测试 fixture。它与 [compiler-development-process.md](compiler-development-process.md) 配合使用；流程文档决定何时审计，本文件决定代码达到什么质量才能进入审计。
 
 ## 1. 总体原则
 
@@ -90,7 +90,7 @@ cmd/ts2bin
   -> bingo MIR / verifier
   -> runtimeabi / capability registry
   -> llvmbackend
-  -> runtime/bingo-rt
+  -> runtime/bingo-rt Rust staticlibs
 ```
 
 依赖规则：
@@ -98,6 +98,7 @@ cmd/ts2bin
 - `internal/tsfrontend` 是唯一允许导入 tsgo `internal/ast`、`internal/checker`、`internal/compiler` 和 `internal/tsoptions` 的层。
 - HIR、MIR、verifier、runtimeabi 和 LLVM backend 只能读取 snapshot/DTO，不能获取 checker 指针。
 - runtime 实现不能反向依赖 AST、checker 或 CLI。
+- Rust runtime 只依赖 ABI schema、descriptor/layout、capability 和 platform contracts；不得通过生成绑定反向导入 Go compiler package。
 - 测试可以依赖被测层的公开测试接口，但不能为了测试方便导出生产内部状态。
 - 新包必须写清 ownership、依赖方向和删除/合并理由；禁止循环依赖和跨层快捷调用。
 
@@ -204,7 +205,7 @@ func BuildSnapshot(ctx context.Context, req BuildRequest) (*ProgramSnapshot, []D
 - 每一个获取资源的函数都必须有清晰的释放点；优先在同一作用域 `defer`，不要把 release 责任藏在远端调用者。
 - 禁止共享可变全局状态；测试和 CLI 多次运行必须可重复。
 - goroutine、线程、async frame、GC root、cleanup stack 和 LLVM context 的 ownership 必须在注释和类型契约中可见。
-- 取消、超时和 panic 路径必须释放 checker、临时文件、runtime handle 和 LLVM资源。
+- 取消、超时、Go panic 和 Rust error/status 路径必须释放 checker、临时文件、runtime handle 和 LLVM 资源；Rust release runtime 的 panic policy 是 abort，用户输入不得触发 panic。
 
 ## 8. 生成代码和外部绑定
 
@@ -212,6 +213,9 @@ func BuildSnapshot(ctx context.Context, req BuildRequest) (*ProgramSnapshot, []D
 - 修改生成器后必须重生成并检查 diff；不得只手工修生成结果。
 - LLVM/go-llvm、FFI 和 runtime ABI wrapper 只能在边界层出现；业务代码不能散落 C API 调用。
 - 外部 API 的 wrapper 必须写 ownership、空指针、错误、线程和版本假设；不要用 `unsafe.Pointer` 或裸 `i8*` 隐藏类型。
+- Rust `unsafe` 只允许出现在 ABI、GC、layout、原子、TLS、平台或外部 engine 边界；每个 block 必须写 alignment、lifetime、alias、root/safepoint 和并发安全契约。
+- 跨语言类型必须 `repr(C)`/固定 schema；禁止暴露 Rust `String`、`Vec`、引用、slice、默认 enum、trait object、future 或 panic。
+- Rust runtime 的公共 symbol、crate feature、Cargo dependency 和 `no_std/std` 选择都是 ABI/capability 契约，不能作为局部实现细节随意改变。
 
 ## 9. 可读性审计清单
 
