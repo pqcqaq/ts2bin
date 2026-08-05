@@ -58,7 +58,7 @@ TypeScript source
 - 标准库采用“Rust 原语 + 受限 TypeScript 自举算法 + 可选重型引擎适配”三层结构；泛型自举代码以已验证 Bingo HIR/package 分发并按需实例化。
 - 普通 TypeScript 对象允许循环引用，general static profile 默认使用非移动 tracing GC；ARC/arena 只能作为有额外可证明约束的受限 profile。
 - `Array<T>` 的可变元素默认不变，`ReadonlyArray<T>` 和只读字段才允许协变；tsgo 的历史兼容性结果不能直接当作 Bingo 布局安全证明。
-- Phase 1.5 已形成 schema v2、wire 单一 validator、Kind shape/semantic-proof registry、带 provenance 的 target-independent `FrontendSnapshot`、canonical unresolved `BuildPlan`、checker-free replay，以及执行到 typed HIR 的 canonical production pass 前缀。`FE-008..011` 的代码与既有回归已通过；当前 patch 已重生成并通过 doctor、official remote clean checkout、全仓 test/vet 和 cleanup，SHA-256 由 `ts2bin.lock.json` 锁定；只剩 parent HEAD clean-clone 证明。Phase 2A 先并行建立 `BE-001a`/`RT-002a`，再以 `ResolveTargetContext` 绑定 toolchain/runtime manifests、权威 DataLayout 和 `AvailableCapabilityCatalog`；target-aware MIR 之后才生成 `BoundCapabilityClosure`。number-only MIR/real LLVM/object/LLD 纵切通过前，Phase 2B 和广泛语法保持 blocked。
+- Phase 1.5 已形成 schema v2、wire 单一 validator、Kind shape/semantic-proof registry、带 provenance 的 target-independent `FrontendSnapshot`、canonical unresolved `BuildPlan`、checker-free replay，以及执行到 typed HIR 的 canonical production pass 前缀。`FE-008..011`、`IR-000` 与最终 patch/clean-clone 交付门均已通过；`b2dca40` 的 doctor、frontend 九阶段（含 race/shuffle/repeat）、全仓 test/vet 和 official remote isolated verification 均通过，SHA-256 由 `ts2bin.lock.json` 锁定。Phase 2A 现在可以启动：先并行建立 `BE-001a`/`RT-002a`，再以 typed `ResolveTargetContext` envelope 绑定 toolchain/runtime manifests、权威 DataLayout 和 `AvailableCapabilityCatalog`；target-aware MIR 之后才生成 `BoundCapabilityClosure`。number-only MIR/real LLVM/object/LLD 纵切通过前，Phase 2B 和广泛语法保持 blocked。
 
 ## 交付物与唯一事实来源
 

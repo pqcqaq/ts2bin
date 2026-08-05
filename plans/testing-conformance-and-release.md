@@ -273,8 +273,8 @@ ts2bin doctor      # tsgo/LLVM/runtime capability audit
 本节只保留优先级视图；稳定 issue ID、依赖和退出命令以 [implementation-backlog.md](implementation-backlog.md) 为准：
 
 ```text
-P0  Phase 1.5: FE-008a/009a/010a/011a/011b, IR-000a, then FND-004a
-P0  Phase 2A: (IR-007a -> IR-001a -> IR-002a -> IR-003a) || BE-001a || RT-002a
+P0  [complete] Phase 1.5: FE-008a/009a/010a/011a/011b, IR-000a, then FND-004a
+P0  [ready] Phase 2A: FE-012a -> (IR-007a -> IR-001a -> IR-002a -> IR-003a) || BE-001a || RT-002a
     -> TC-001a
     -> IR-004a/005a + RT-002b + BE-002a/004a -> REL-001a -> VERT-001 -> REL-002a
 P1  Phase 2B: full IR-001..008 primitive/control-flow contracts

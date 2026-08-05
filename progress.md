@@ -263,9 +263,10 @@ go run ./cmd/ts2bin compatibility --update-baseline
 
 本节取代上一个“Phase 1.5 退出审计收口”中的当前状态、旧 patch hash 和 Phase 2A 顺序；更早段落仅保留历史证据。
 
-- 总体架构不变：`FrontendSnapshot -> target-independent typed HIR -> ResolveTargetContext -> target-aware MIR -> LLVM/object -> Rust C ABI runtime + LLD`。
+- 总体架构不变：`FrontendSnapshot -> target-independent typed HIR`；`BuildPlan + manifests -> ResolveTargetContext`；两者在 `RepresentationPlan` 汇合后进入 `target-aware MIR -> LLVM/object -> Rust C ABI runtime + LLD`。
 - canonical pass DAG 已新增不可绕过的 `ResolveTargetContext`，并显式区分 `AvailableCapabilityCatalog` 与 structural MIR 后的 `BoundCapabilityClosure`。
 - typed HIR 已把 FrontendSnapshot schema/hash、source hash、tsgo commit、stdlib hash 与 Kind manifest hash 纳入 canonical provenance；replay/post-verifier 交叉校验来源 snapshot hash。
 - BigInt/RegExp 的 snapshot-time 诊断已改为 target-independent `subset.lowerer_unavailable`；runtime capability availability 留到 TargetContext 后判断。
 - Phase 2A 依赖改为并行的 `IR-007a -> IR-001a -> IR-002a -> IR-003a`、`BE-001a`、`RT-002a`，然后 `BE-001a + RT-002a + BuildPlan -> TC-001a -> IR-004a/005a`。LLVM TargetMachine 查询值是 DataLayout 权威源；link 只复验同一个 immutable TargetContext，不重新解析。
-- 二次审计后的 patch 已重生成，SHA-256 为 `cc4c9ab435810a23d31a1c1c72b040ae9241fbbadf1c041c6815df7266339e95`；doctor materialized-exact、official remote isolated apply/full test/vet/cleanup 已通过。`FND-004` 与 Phase 1.5 仅剩最终 parent HEAD clean clone 证明，完成前仍为 `acceptance-blocked`。
+- 二次审计后的 patch 已重生成，SHA-256 为 `cc4c9ab435810a23d31a1c1c72b040ae9241fbbadf1c041c6815df7266339e95`；`b2dca40` 的 doctor、clean-clone frontend 九阶段（含 race/shuffle/repeat）、全仓 `go test ./...`/`go vet ./...` 与 official remote isolated apply/full test/vet/cleanup 已通过。`FND-004` 与 Phase 1.5 已 complete，Phase 2A 可启动但尚未完成。
+- Phase 2A 首切入口新增四项关闭条件：validated snapshot 才能作为 subset/lowering 输入；`IR-001a` 冻结 HIR schema major 2 并纳入 lock patch/compiler build identity；`IR-002a` 传递 canonical logical capability requirements（纯 add 的 bound closure 可为空）；`TC-001a` 使用 typed multi-artifact resolver envelope，显式证明 HIR/BuildPlan/manifests join，不能用 `PassState.Facts []string` 冒充 proof。

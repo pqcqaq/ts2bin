@@ -1,7 +1,9 @@
 # typescript-go patch delivery
 
-This directory is the temporary reproducible delivery mechanism for the thin
-`typescript-go` fork until `FND-004` is replaced by an accessible fork commit.
+This directory is the reproducible delivery mechanism for the thin
+`typescript-go` patch while the project remains on the upstream submodule. It
+may later be replaced by an accessible fork commit, but the locked patch is a
+complete delivery mechanism today.
 
 The patch is based on upstream commit
 `12318e599d21f516defea3b20e5d44b9369da723`. The repository lock records the

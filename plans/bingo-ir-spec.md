@@ -1,6 +1,6 @@
 # Bingo IR 初始规格
 
-本文定义 Bingo HIR/MIR v1 的最小可实现形式。它不是 LLVM IR 的别名，也不是 TypeScript AST 的序列化版本。
+本文定义当前 pre-release Bingo HIR/MIR v1 的最小可实现形式；`IR-001a` 在 mandatory provenance 和 logical capability contract 冻结时必须协调升为 schema major 2。它不是 LLVM IR 的别名，也不是 TypeScript AST 的序列化版本。
 
 ## 1. 分层职责
 
@@ -208,7 +208,7 @@ rt.module.*, rt.decorator.*, rt.jsx.*
 rt.dispose.*, rt.dynamic.*
 ```
 
-这些不是任意字符串调用，而是带 capability id 和版本化签名的 intrinsic。backend 由 manifest 把 intrinsic 映射到符号。
+这些不是任意字符串调用，而是带 logical `RuntimeCapabilityId` 和版本化签名的 intrinsic。HIR artifact/op 必须 canonical 保存 logical requirement，但不能提前写入 resolved symbol、available catalog 或 bound closure；backend 只在 `ResolveTargetContext` 和 structural MIR binding 后由 manifest 映射到符号。纯 number add 的 logical requirement 列表为空也必须进入 canonical hash。
 
 ## 7. Effect 系统
 
@@ -334,7 +334,8 @@ HIR 与 MIR 使用分层 provenance；这些字段都属于 canonical content ha
 
 ```text
 HIR: schema version, FrontendSnapshot schema/hash, canonical source hashes,
-     typescript-go commit, standard-library hash, Kind-manifest hash
+     CompilerBuildIdentity(upstream commit + patch base/SHA-256 + lowering schema),
+     standard-library hash, Kind-manifest hash + logical-capability-requirement digest
 MIR: HIR provenance + BuildPlan digest + TargetContext hash
      + toolchain/runtime/ABI/layout/available-capability manifest digests
      + resolved target triple + authoritative LLVM DataLayout/hash
@@ -343,4 +344,4 @@ MIR: HIR provenance + BuildPlan digest + TargetContext hash
 
 HIR canonical hash 必须覆盖全部 provenance；缺失、未知 schema major 或格式错误均由 verifier 拒绝。`RepresentationPlan` join pre-verifier 必须验证 HIR 的 `FrontendSnapshotHash` 与 `BuildPlan.FrontendHash` 相同，并验证 resolver output 与 BuildPlan 请求一致；replay/post-verifier 也必须交叉核对来源 plan，不能只在篡改后重新计算 HIR hash。MIR 构造把 available catalog 与后续 bound closure 分别哈希。
 
-reader 只保证读取同一 major IR version。缓存命中必须比较全部 digest；不能只比较源文件时间戳。
+reader 只保证读取同一 major IR version。当前 mandatory provenance 已在 pre-release v1 期间变化，因此 `IR-001a` 必须同步更新 `HIRSchemaVersion`、replay schema、lock 的 `bingoIR` 和 IR-008 migration/rejection tests 后再把 v2 视为稳定。缓存命中必须比较全部 digest；不能只比较源文件时间戳。

@@ -43,7 +43,7 @@ typescript-go/                         # 维护中的薄 fork
 | 边界 | 详细规格 | 进入下一层的门槛 |
 | --- | --- | --- |
 | tsgo -> snapshot | [tsgo-integration.md](tsgo-integration.md) | 诊断通过、ID 稳定、checker 已 release |
-| snapshot + BuildPlan -> HIR/MIR | [bingo-ir-spec.md](bingo-ir-spec.md) | BuildPlan 已规范化，Phase 2A 已解析 TargetContext，类型、布局、CFG 和 effect 通过 verifier |
+| snapshot -> typed HIR；BuildPlan + manifests -> TargetContext；RepresentationPlan join -> MIR | [bingo-ir-spec.md](bingo-ir-spec.md) | snapshot/HIR 与 typed resolver envelope 分别验证，join provenance 一致，类型、布局、CFG 和 effect 通过 verifier |
 | `.d.ts` -> runtime | [stdlib-runtime-plan.md](stdlib-runtime-plan.md) | capability manifest 有实现且 ABI hash 匹配 |
 | 源码 -> 发布物 | [testing-conformance-and-release.md](testing-conformance-and-release.md) | conformance、差分、LLVM verifier、可复现构建通过 |
 | 规格 -> 开发任务 | [implementation-backlog.md](implementation-backlog.md) | issue 依赖、artifact 和验收命令齐全 |
@@ -314,7 +314,7 @@ Windows 开发优先使用 WSL2/Linux 或容器；TinyGo bindings 的预置 cgo 
 
 LLVM 生成 `app.o`/`app.obj` 后，backend 根据 bound MIR intrinsic 计算 runtime capability 闭包，选择 target/profile/ABI hash 完全一致的唯一 Rust umbrella staticlib 和显式外部引擎 archives，并生成确定性 linker response file。ELF 使用 `ld.lld`，COFF 使用 `lld-link`，Mach-O 使用锁定的 LLD 兼容 driver。链接器不得从系统默认路径偶然选择另一个 runtime；最终产物必须记录 rustc build ID、Cargo lock/features、umbrella archive hash、LLD 和 ABI/layout/capability hash。
 
-真实后端不能等到高级 runtime 全部完成才验证。`VERT-001` 在对象、GC、异常和异步之前锁定一条 `x86_64-unknown-linux-gnu` primitive 纵切：`add(number, number)` 必须经过 target-independent snapshot、HIR/MIR verifier、真实 go-llvm、LLVM verifier、object emission、空 startup/umbrella runtime 与 LLD，并由运行 harness 验证结果。该纵切不承诺完整 runtime 或第二目标，但它是后续 pass、ABI 和工具链变更的强制回归门禁。
+真实后端不能等到高级 runtime 全部完成才验证。`VERT-001` 在对象、GC、异常和异步之前锁定一条 `x86_64-unknown-linux-gnu` primitive 纵切：`add(number, number)` 必须经过 validated target-independent snapshot、typed HIR verifier、BuildPlan/manifest `ResolveTargetContext`、RepresentationPlan join、target-aware MIR verifier、真实 go-llvm、LLVM verifier、object emission、空 startup/umbrella runtime 与 LLD，并由运行 harness 验证结果。该纵切不承诺完整 runtime 或第二目标，但它是后续 pass、ABI 和工具链变更的强制回归门禁。
 
 ## 9. 诊断模型
 

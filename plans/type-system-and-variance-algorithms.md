@@ -452,9 +452,9 @@ InstantiationKey {
 2. 对调用点读取 snapshot 中 checker 选定的 type arguments；不在后端重新推断。
 3. canonicalize substitution，构建 InstantiationKey。
 4. cache miss 时先登记 `InProgress` 递归哨兵条目，阻断递归无限展开。
-5. 用 substitution 克隆 HIR 类型引用，重新选择 RepType 和 ConversionPlan。
-6. 验证实例 HIR，lower 到 MIR，再发现新的实例化请求。
-7. 所有依赖完成后把 cache entry 置为 `Complete`；失败置为带稳定诊断的 `Rejected`。
+5. 用 substitution 克隆 target-independent HIR 类型引用并扫描新的 `InstantiationKey`；此时不得选择 RepType、ConversionPlan 或 lower 到 MIR。
+6. 持续处理 HIR worklist 到 fixed point，验证每个实例 HIR；所有 HIR 依赖完成后才把 cache entry 置为 `Complete`，失败置为带稳定诊断的 `Rejected`。
+7. 全部实例化 key complete 后，使用同一个 resolved TargetContext 执行 RepresentationPlan，选择 RepType/ConversionPlan 并 lower 到 MIR。MIR 阶段若发现新的实例化请求视为 verifier/compiler bug。
 
 递归调用同一 key 复用 `InProgress` 符号。若 key 持续增长，例如 `F<T> -> F<T[]>`，由 budget 拒绝。
 

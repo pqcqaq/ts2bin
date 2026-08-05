@@ -194,7 +194,7 @@ func TestSnapshotRejectsEscapedCheckerPointers(t *testing.T) {
 ### 7.2 HIR/MIR
 
 - HIR 测试只消费本 case 新生成的 snapshot，或读取该 case 的只读 snapshot fixture。
-- MIR 测试不能依赖另一个 HIR 测试先写 golden；本测试自行完成 HIR -> MIR。
+- MIR 测试不能依赖另一个 HIR 测试先写 golden；本测试自行验证 HIR，构造 BuildPlan/toolchain/runtime manifests，执行 ResolveTargetContext 与 RepresentationPlan join 后再生成 MIR。
 - verifier 必须有正例和人工构造的 malformed IR 负例。
 - 消糖测试必须用计数 getter、computed key、iterator 或 call 验证单次求值。
 

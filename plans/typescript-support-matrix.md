@@ -8,7 +8,7 @@
 
 | 标记 | 含义 |
 | --- | --- |
-| S0 | 第一版静态子集，直接进入 Bingo HIR/MIR |
+| S0 | 第一版静态子集；先进入 target-independent Bingo HIR，经 ResolveTargetContext/RepresentationPlan 后才进入 target-aware MIR |
 | S1 | 前端消糖后支持；源节点不进入最终 HIR |
 | S2 | 依赖 runtime、状态机、对象模型或 ABI |
 | C | 只参与类型检查/常量求值，最终擦除 |

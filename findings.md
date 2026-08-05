@@ -3,10 +3,10 @@
 ## 环境
 
 - 工作目录：`D:\Develop\git\ts2bin`。
-- 当前父仓库位于 `main`，审计时 HEAD 为 `5f44799d9f6c1fa0770f26dcd811180f9afa721b`，已有 5 个提交且与 `origin/main` 对齐。
+- 当前父仓库位于 `codex/phase15-exit`，HEAD 为 `b2dca40efb3ab730c58af2b9c052a31da406574a`（`fix(project): resolve phase 1.5 audit gaps`）。
 - Node.js：`v22.22.0`；Go：`1.26.0`；Rust：`1.97.1`。
 - npm registry 当前 TypeScript 稳定版：`7.0.2`（查询日期：2026-08-03）。
-- `typescript-go/` 已作为 Git submodule 纳入父仓库；当前 parent gitlink 指向上游 `12318e599d21f516defea3b20e5d44b9369da723`，内部版本为 `7.1.0-dev`。二次审计后的 dirty/untracked 实现已重新生成 binary patch，lock hash 与 doctor materialized-exact 一致，official remote isolated full test/vet/cleanup 已通过；只有从包含这些交付物的 parent HEAD clean clone 复验后，`FND-004` 才能关闭。
+- `typescript-go/` 已作为 Git submodule 纳入父仓库；当前 parent gitlink 指向上游 `12318e599d21f516defea3b20e5d44b9369da723`，内部版本为 `7.1.0-dev`。二次审计后的 binary patch、lock、doctor materialized-exact、parent HEAD clean-clone 全阶段回归和 official remote isolated full test/vet/cleanup 均通过，`FND-004` 已关闭。
 - 直接执行 `npx tsc` 会命中 npm 上名为 `tsc` 的占位包，校验应使用 `npx -p typescript@latest tsc` 或项目本地依赖。
 
 ## 官方资料
@@ -90,7 +90,8 @@
 - checker `Type` 有稳定的 `Id/Flags/ObjectFlags/Symbol/Alias` 访问器，Signature 有 `Id/Flags/TypeParameters/Parameters/ThisParameter/MinArgumentCount`；snapshot 应复制这些公开信息并给自己的稳定 ID，避免持有内部 type data。
 - binder/checker 的 flow graph 包含 assignment、call、condition、switch、branch、loop、array mutation、reduce/start/unreachable 等节点；Bingo 不应序列化内部 FlowNode 图，而应在表达式位置记录 checker 已求出的 narrowed TypeId，并自行构建 MIR CFG。
 - 文档执行层需要独立于架构叙述：采用 `FND/FE/IR/OBJ/MOD/RT/ADV/BE/REL` 稳定 issue ID，每个 issue 绑定矩阵行、AST Kind、artifact、诊断和验收命令。
-- 第一条实现纵切应保持最小语义面，但不能绕过真实边界：`add(number, number)` 仍需经过 Program/checker release、typed snapshot、HIR/MIR verifier、LLVM verifier/link 和 Node differential。
+- 第一条实现纵切应保持最小语义面，但不能绕过真实边界：`add(number, number)` 仍需经过 Program/checker release、validated snapshot、target-independent HIR、BuildPlan/TargetContext 到 RepresentationPlan 的 join、MIR verifier、LLVM verifier/link 和 Node differential。
+- Phase 2A 入口审计发现四项必须先冻结的契约：HIR schema major 2 与 `CompilerBuildIdentity`、logical capability requirement、validated subset-gate input，以及替代 `PassState.Facts []string` 的 typed multi-artifact resolver envelope；它们不改变总体架构，但未关闭前不能生成可信 target-aware MIR。
 - 规格冲突优先级固定为：IR verifier 高于架构叙述，capability manifest 高于 `.d.ts` 可见性，锁定 snapshot schema 高于 tsgo 私有对象布局。
 - 可维护性规范采用“抽象必须证明价值”：核心流程优先保持线性；只有语义单元、稳定不变量、真实复用或外部边界才允许抽取，禁止一行 wrapper、预判式接口和无归属 `utils/helpers`。
 - Program/checker、snapshot、HIR/MIR pass、variance/dynamic、runtime/GC/EH 和 LLVM mapping 属于强制核心注释区域；所有导出 API、配置、诊断、IR 节点和 runtime ABI 必须有契约型文档注释。

@@ -20,7 +20,7 @@ typescript-go/
 
 版本和语义基线只以仓库根目录的 `ts2bin.lock.json` 为准，不在规格中复制手写版本号或 commit。当前锁定 checkout 是 `typescript-go 7.1.0-dev`，但版本字符串不能替代 Kind/API/stdlib/semantic compatibility baseline；每次升级都必须由 `FE-007` 生成差分。
 
-`FND-004` 当前采用过渡 patch 交付：lock 记录 `upstreamCommit`、官方 remote、patch path/base/SHA-256 和 stdlib hash，doctor 重建工作树 binary diff 并要求与 patch hash 完全一致，验证脚本从 remote shallow-fetch 锁定 commit 后 apply/test/vet。最终 patch 已恢复 materialized-exact，官方 remote clean checkout full test/vet/cleanup 与 WSL smoke 通过；最后只需在获授权后提交 lock、patch、脚本和正确 gitlink，并从该 parent HEAD clean clone 重跑完整验收。后续若迁移到 fork commit，再同时锁定可获取的 fork remote/commit，不能退回官方 submodule 加未记录 dirty state。
+`FND-004` 当前采用可复现 patch 交付：lock 记录 `upstreamCommit`、官方 remote、patch path/base/SHA-256 和 stdlib hash，doctor 重建工作树 binary diff 并要求与 patch hash 完全一致，验证脚本从 remote shallow-fetch 锁定 commit 后 apply/test/vet。`b2dca40` 已包含正确 gitlink、lock、patch 和脚本；parent HEAD clean-clone、official remote full test/vet/cleanup 与 WSL smoke 均通过，FND-004 已关闭。后续若迁移到 fork commit，再同时锁定可获取的 fork remote/commit，不能退回官方 submodule 加未记录 dirty state。
 
 上游同步时按顺序运行：tsgo 全量测试、前端 snapshot golden、AST Kind 覆盖、标准库 manifest diff、Bingo conformance。任何一步变化都要分类为“上游语义变化、适配器变化、预期新增能力或回归”。
 
@@ -140,7 +140,7 @@ type BuildPlan struct {
 
 `FrontendSnapshot.ContentHash` 只受 source、会改变前端语义的 tsconfig、source profile、锁定 tsgo/stdlib 和 snapshot schema 影响。target triple、CPU/features、runtime、GC、EH、bounds、emit 等进入 `BuildPlan`；`BuildPlan` 只冻结规范化请求及其 hash，不包含已解析 capability、data layout 或已选择 archive。即使内部 API 名为 `ResolveBuildPlan`，这里的 resolve 也只表示默认值解析和 canonicalization。
 
-Phase 2A 必须在 `RepresentationPlan`/MIR 前执行 `ResolveTargetContext(BuildPlan, toolchain manifest, runtime manifest)`。只有该步骤可以证明 target/CPU/features、LLVM major、ABI/layout、GC/EH profile 和 runtime 实现可用；完整 artifact cache key 组合 frontend hash、build-plan hash、`TargetContext` hash 与 runtime/ABI/layout hashes。
+Phase 2A 必须在 `RepresentationPlan`/MIR 前执行 `ResolveTargetContext(BuildPlan, toolchain manifest, runtime manifest)`。只有该步骤可以证明 target/CPU/features、LLVM major、ABI/layout、GC/EH profile 和 runtime 实现可用；完整 artifact cache key 组合 frontend hash、build-plan hash、`TargetContext` hash、runtime/ABI/layout hashes 与 `CompilerBuildIdentity`（upstream commit、patch base/SHA-256、lowering schema）。
 
 具体 facade 方法仅在实现包内部使用：
 
@@ -326,5 +326,5 @@ DeferredEvaluation
 8. 大小写敏感 host 上 `A.ts`/`a.ts` 不碰撞；Windows/WSL 路径 identity、symlink 和盘符规则有 golden。
 9. 切换 target/CPU/GC/EH/emit 不改变 `FrontendSnapshot.ContentHash`，但必须改变 `BuildPlan.ContentHash` 和对应 artifact cache key。
 10. profile CLI override 覆盖单一字段，不得清空 runtime、target、CPU、features、GC、bounds 或 emit。
-11. 注入 checker query panic/error 时 capture fail closed；不得得到缺失 type/signature/symbol 后仍通过 subset gate 的 snapshot。
+11. 注入 checker query panic/error 时 capture fail closed；不得得到缺失 type/signature/symbol 后仍通过 subset gate 的 snapshot。生产 gate/lowering 入口必须先验证 snapshot/envelope，裸 `RunSubsetGate` 结果不能作为 HIR proof。
 12. bind diagnostic 保留 binding stage、span 和 multiplicity；不得只触发 bind 后丢弃结果并混入 semantic stage。

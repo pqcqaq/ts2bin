@@ -34,8 +34,12 @@ stdlib algorithms       = Rust primitives + verified self-hosted TypeScript
 
 ```text
 TypeScript source
-  -> tsgo snapshot
-  -> Bingo HIR/MIR
+  -> validated tsgo snapshot
+  -> target-independent Bingo HIR
+BuildPlan + toolchain/runtime manifests
+  -> ResolveTargetContext
+typed HIR + TargetContext
+  -> RepresentationPlan -> target-aware Bingo MIR
   -> LLVM module/object
   -> app.o / app.obj
 

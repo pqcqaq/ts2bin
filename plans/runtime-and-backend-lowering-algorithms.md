@@ -688,7 +688,7 @@ runtime 行为使用 Node/规范 oracle 做 differential；不应依赖 Node 的
 ## 23. 实施顺序
 
 1. Phase 2A 先用锁定 toolchain/runtime manifests 实现 `ResolveTargetContext`，并固定首切所需的最小 `bingo-abi`、唯一空 umbrella `staticlib` 和 deterministic response file。
-2. 完成 `VERT-001`：`x86_64-unknown-linux-gnu` 的 `add(number, number)` 经过 target-independent snapshot、已解析 TargetContext、verified HIR/MIR、真实 go-llvm、LLVM verifier、object emission、空 startup/umbrella runtime、LLD 和 run harness；不引入对象、GC 或 EH。
+2. 完成 `VERT-001`：`x86_64-unknown-linux-gnu` 的 `add(number, number)` 经过 validated target-independent snapshot、verified HIR、BuildPlan/manifest resolver、RepresentationPlan join、target-aware verified MIR、真实 go-llvm、LLVM verifier、object emission、空 startup/umbrella runtime、LLD 和 run harness；不引入对象、GC 或 EH。
 3. 实现 MIR checks、`ObjectView`/fixed object/array/closure layout、single-mutator shadow-stack root 和最小 mark-sweep runtime，并通过 O0/O2 root audit。
 4. 实现 self-hosted stdlib package、module SCC 初始化、generic specialization 与 iterator。
 5. 实现全链 status-code cleanup、using 和 exception carrier；Rust helper 保持显式 status，panic 不表达语言异常。

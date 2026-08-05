@@ -26,7 +26,7 @@
 | tsgo | submodule gitlink 与 ts2bin.lock.json 中的完整 commit |
 | TypeScript 语义 | 以 `ts2bin.lock.json` 锁定的 typescript-go checkout、stdlib hash 和 `FE-007` semantic baseline 为准；版本字符串本身不证明支持 |
 | Bingo Snapshot | schema major 2，作为 Phase 1.5 snapshot-only lowering 门禁 |
-| Bingo HIR/MIR | schema major 1 |
+| Bingo HIR/MIR | 当前 pre-release schema major 1；`IR-001a` 必须在 mandatory provenance/capability envelope 冻结时协调升为 major 2，并同步 replay、lock、IR-008 migration/rejection tests |
 | runtime ABI | major 1 |
 | runtime core | 每个 target/profile/feature set 唯一 Rust umbrella `staticlib` + versioned `extern "C"` ABI；内部 crate 使用 `rlib` |
 | LLVM | major 20 |
@@ -38,7 +38,7 @@
 | 默认字符串 | UTF-16 code unit |
 | 默认方差 | 函数参数逆变、返回协变、可写位置不变 |
 
-当前 `ts2bin.lock.json` 已记录 snapshot schema 2、no-EH 默认值和最终 patch SHA-256；compatibility/snapshot/options baseline 的有意 UTF-8 wire 变化已审查并通过回归。doctor materialized-exact、官方 remote shallow clean checkout apply/full test/vet/cleanup 与 WSL smoke 已通过；只剩获授权 parent commit/HEAD clean-clone 证明，不能用未提交工作树代替。第一条纵切使用 `exceptions=none`；`ResolveBuildPlan` 对 `llvm-eh` 的早期拒绝只表示当前 no-EH lowering/schema 边界，不是工具链可用性探测。status/native-unwind 契约须在进入异常实现前单独冻结，其他 target/runtime availability 统一留给 `TC-001a`。
+当前 `ts2bin.lock.json` 已记录 snapshot schema 2、no-EH 默认值和最终 patch SHA-256；compatibility/snapshot/options baseline 的有意 UTF-8 wire 变化已审查并通过回归。`b2dca40` 的 doctor、parent HEAD clean-clone、官方 remote shallow clean checkout apply/full test/vet/cleanup 与 WSL smoke 已通过，Phase 1.5 complete。第一条纵切使用 `exceptions=none`；`ResolveBuildPlan` 对 `llvm-eh` 的早期拒绝只表示当前 no-EH lowering/schema 边界，不是工具链可用性探测。status/native-unwind 契约须在进入异常实现前单独冻结，其他 target/runtime availability 统一留给 `TC-001a`。
 
 禁止以“tsgo parser 能解析”代替“Bingo 可以生成安全本机代码”。支持级别仍使用 S0/S1/S2/C/P/R。
 
@@ -125,7 +125,9 @@ Compile(BuildRequest req):
 
 `RunSourceSubsetGate` 只能判断 snapshot 是否具备当前 lowerer 所需的 target-independent 语义事实。BigInt、RegExp 等尚无 source lowerer 时在此报告 `subset.lowerer_unavailable`；“所选 runtime 不提供 capability”只能由 `ResolveTargetContext` 之后的 target capability gate 报告。`ResolveTargetContext` 可以与 HIR 链并行，返回的 `AvailableCapabilityCatalog` 是 manifest 声明的可用实现目录，不是程序实际使用能力的精确闭包；`VerifyRepresentationJoin` 才交叉核对 HIR `FrontendSnapshotHash`、`BuildPlan.FrontendHash` 与 resolver request/context hashes，后者只有在 structural MIR 完成后才能由 `BindRuntimeCapabilities` 计算为 `BoundCapabilityClosure`。
 
-`targetContext.llvmDataLayout` 必须来自为已解析 target 创建的 LLVM `TargetMachine` 查询结果。toolchain manifest 记录预期 DataLayout 文本/hash，ABI layout manifest 做独立交叉校验；任一不一致都 fail closed，manifest 或 ABI schema 均不得覆盖 LLVM 返回值。Phase 2A pass state 必须使用带 canonical bytes/digest 的 typed resolver envelope/fact store，同时保留 HIR、BuildPlan、manifests、TargetContext、DataLayout 和 catalog；裸 fact 名称没有证明力。`LinkWithLLD` 接收同一个不可变 `TargetContext` 及其 hash，只重新校验 manifests/artifacts，不得再次解析或选择 target。
+`targetContext.llvmDataLayout` 必须来自为已解析 target 创建的 LLVM `TargetMachine` 查询结果。toolchain manifest 记录预期 DataLayout 文本/hash，ABI layout manifest 做独立交叉校验；任一不一致都 fail closed，manifest 或 ABI schema 均不得覆盖 LLVM 返回值。Phase 2A pass state 必须使用带 canonical bytes/digest 的 typed multi-artifact resolver envelope/fact store，同时保留并独立绑定 verified HIR、BuildPlan、manifests、TargetContext、DataLayout 和 catalog；裸 fact 名称没有证明力。`RunSubsetGate`/lowering 只能消费已验证 snapshot 或带验证证明的 envelope，不能把未验证输入的诊断结果当作 lowering proof。`LinkWithLLD` 接收同一个不可变 `TargetContext` 及其 hash，只重新校验 manifests/artifacts，不得再次解析或选择 target。
+
+HIR/MIR/artifact provenance 和 cache key 必须包含 `CompilerBuildIdentity`：锁定的 upstream commit、patch base/SHA-256 与 lowering schema/hash。只记录 upstream commit 不足以区分同一上游基线上的不同补丁。HIR 同时保存 canonical logical capability requirements；`ResolveTargetContext` 只证明这些 requirement 在 `AvailableCapabilityCatalog` 中可解析，structural MIR 后才产生程序实际使用的 `BoundCapabilityClosure`。纯 `add(number, number)` 的 catalog 可以非空而 bound closure 为空，两者必须有独立 hash 与测试。
 
 任何失败都必须归属一个明确层：
 
@@ -434,7 +436,7 @@ x86_64-unknown-linux-gnu add(number, number)
 该纵切不依赖对象、GC、EH、self-hosted stdlib、async 或第二 target。实现顺序调整为：
 
 1. 完成 lowering-complete snapshot、snapshot-only HIR readiness 和本节 pass DAG 门禁。
-2. Phase 2A 让 target-independent `number` typed-HIR 链与 `BE-001a` LLVM TargetMachine/DataLayout、`RT-002a` empty runtime scaffold 并行推进；三路输入齐备后实现最小 `ResolveTargetContext`，再接入 RepresentationPlan、单 block MIR、structural/final verifier 和真实后端，最后完成 `VERT-001`。
+2. Phase 2A 先关闭 validated-input hardening；再让 target-independent `number` typed-HIR 链与 `BE-001a` LLVM TargetMachine/DataLayout、`RT-002a` empty runtime scaffold 并行推进。`IR-001a/002a/003a` 同步冻结 HIR schema major 2、CompilerBuildIdentity 和 logical capability requirements；三路输入齐备后实现带 typed multi-artifact envelope 的最小 `ResolveTargetContext`，再接入 RepresentationPlan、单 block MIR、structural/final verifier 和真实后端，最后完成 `VERT-001`。
 3. 在 Phase 2B 实现 local、direct call、branch/general CFG/SSA、loop、union narrowing、nullish、optional/logical 和 patterns。
 4. 冻结 `ObjectView`、object/class/closure layout 与 variance adapter，再引入 single-mutator GC v1。
 5. 实现 modules、generics、array/map/set/iterator 和 self-hosted stdlib。
