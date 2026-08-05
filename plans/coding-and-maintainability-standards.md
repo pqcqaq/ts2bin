@@ -43,17 +43,24 @@
 Program/config
   -> diagnostics
   -> checker borrow
-  -> immutable snapshot
-  -> subset gate
-  -> HIR lowering
+  -> immutable FrontendSnapshot
+  -> canonical unresolved BuildPlan
+  -> source subset gate
+  -> target-independent HIR lowering
   -> HIR verifier
-  -> MIR lowering
-  -> MIR verifier
-  -> capability binding
+  -> ResolveTargetContext(BuildPlan, locked manifests)
+  -> immutable TargetContext + authoritative LLVM TargetMachine DataLayout
+     + AvailableCapabilityCatalog
+  -> RepresentationPlan
+  -> target-aware MIR lowering
+  -> structural MIR verifier
+  -> BindRuntimeCapabilities
+     -> BoundCapabilityClosure + exact effect freeze
+  -> final MIR verifier
   -> LLVM backend
 ```
 
-可以抽取的函数必须对应上面某一个完整阶段或一个明确不变量，并在调用点附近保留阶段顺序。主流程应能回答：输入是什么、何时获得 checker、何时 release、何时可以并行、哪一层负责拒绝、哪一层负责 cleanup。
+可以抽取的函数必须对应上面某一个完整阶段或一个明确不变量，并在调用点附近保留阶段顺序。target-independent HIR 与 `BE-001a`/`RT-002a` 可并行，但必须在 `ResolveTargetContext` 后汇合；source/HIR lowering 只能记录 logical capability requirements，不能把 available catalog 当成程序实际使用的闭包。主流程应能回答：输入是什么、何时获得 checker、何时 release、何时可以并行、哪一层负责拒绝、哪一层负责 cleanup。
 
 ### 2.3 函数长度与复杂度
 
@@ -110,7 +117,7 @@ cmd/ts2bin
 
 - Program 构造、诊断闸门、checker 借用与 release。
 - snapshot 捕获和内部指针转稳定 ID 的边界。
-- HIR -> MIR 的每个 normalization/lowering pass。
+- HIR normalization/lowering passes and the explicit `ResolveTargetContext`/`RepresentationPlan` boundary before MIR。
 - variance adapter、checked cast、unsafe provenance 和 dynamic boundary。
 - 模块循环依赖初始化、异常/cleanup 边、async/generator 状态机。
 - GC root、write barrier、对象布局、字符串/TypedArray ABI。

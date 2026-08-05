@@ -11,7 +11,7 @@
 | Bingo MIR | RepType、CFG/SSA、内存、cleanup、调用约定、runtime op | conditional/mapped 等纯类型节点 |
 | LLVM IR | 目标 data layout、ABI、具体指令、metadata | TypeScript assignability 决策 |
 
-任何 lowering 都遵循：`source semantic -> HIR op -> MIR op -> LLVM op/runtime call`。不允许从 AST handler 直接调用 LLVM builder。
+任何 lowering 都遵循：`source semantic -> target-independent HIR op -> ResolveTargetContext -> RepresentationPlan -> target-aware MIR op -> LLVM op/runtime call`。不允许 HIR 绕过 resolver/representation 边界直接进入 MIR，也不允许从 AST handler 直接调用 LLVM builder。
 
 ## 2. 通用实体
 
@@ -68,11 +68,11 @@ TsType 与 RepType 是多对一关系。例如多个字符串 literal 都映射 
 3. 用 `SourceTypePlan` 生成 typed HIR，完成求值顺序和语义消糖。
 4. 运行 specialization worklist 到 fixed point；每个新实例重新进入同一 canonical registry，直到没有新 work item 或触发预算诊断。
 5. 对 specialized HIR 验证 variance、aliasing 和 conversion，生成 adapter/checked cast 或拒绝。
-6. Phase 2A 调用 `ResolveTargetContext(BuildPlan, toolchain manifest, runtime manifest)`，把 `canonical`、未解析的 backend request 解析为不可变目标上下文；缺失或不兼容项在此 fail closed。
-7. 结合已解析 `TargetContext` 建立 `RepresentationPlan`，选择 RepType、layout、calling convention 和 GC pointer map。
-8. 使用冻结的 representation/effect contract 进入 MIR CFG/SSA 与 final verifier。
+6. Phase 2A 调用 `ResolveTargetContext(BuildPlan, toolchain manifest, runtime manifest)`，把 canonical unresolved backend request 解析为不可变 `TargetContext`、LLVM `TargetMachine` 的权威 `DataLayout` 和 `AvailableCapabilityCatalog`；缺失或不兼容项在此 fail closed。
+7. 结合已解析 `TargetContext` 与 available catalog 建立 `RepresentationPlan`，选择 RepType、layout、calling convention 和 GC pointer map。
+8. 由冻结的 representation contract 进入 MIR CFG/SSA，structural verifier 通过后再从实际 intrinsic 计算 `BoundCapabilityClosure` 并冻结精确 effect，最后进入优化、root placement 与 final verifier。
 
-target、layout 或 GC strategy 不得进入 raw frontend snapshot/`SourceTypePlan` hash。`BuildPlan` 只记录规范化请求，不拥有 `TargetContext`；target-dependent `RepresentationPlan`、MIR 和 artifact cache key 必须绑定 `TargetContext` 及其 toolchain/runtime manifest hashes。
+target、layout 或 GC strategy 不得进入 raw frontend snapshot/`SourceTypePlan` hash。`BuildPlan` 只记录规范化请求，不拥有 `TargetContext`；source/HIR lowering 只能记录 logical capability requirements，不能把可用目录当成程序实际使用的闭包。target-dependent `RepresentationPlan`、MIR 和 artifact cache key 必须绑定 `TargetContext` 及其 toolchain/runtime manifest hashes。
 
 ## 4. HIR 模块与定义
 
@@ -258,7 +258,9 @@ reason, requiredCapability
 13. `PlaceGCRootsAndFreezeCleanup`
 14. `VerifyFinalMIR`
 
-`ResolveTargetContext` 是 Phase 2A 的 target-dependent 门，不是普通 HIR rewrite；它消费 `BuildPlan` 和锁定 toolchain/runtime manifests，后续表示/MIR pass 只消费其结果。每个 pass 都声明输入 schema、输出 schema、读取/新增的 fact 和是否会引入 call/safepoint/throw/suspend。pass 不得改变可观察求值顺序；effect freeze 后不得引入新 capability/safepoint/throw，root placement 后不得运行会隐藏引用 lifetime 或引入新 safepoint 的 MIR pass。每步可独立 dump/diff，且有正常、malformed 和循环 specialization golden。
+`ResolveTargetContext` 是 Phase 2A 的 target-dependent 门，不是普通 HIR rewrite；它消费 canonical unresolved `BuildPlan`、锁定 toolchain/runtime manifests 和 LLVM `TargetMachine`，产出 `target-context`、`data-layout` 与 `available-capability-catalog` facts。它可以与 target-independent HIR 链并行。后续 `RepresentationPlan` 的 join pre-verifier 同时消费 verified HIR、BuildPlan 与 resolver output，交叉核对 frontend/provenance hashes 后才允许进入 target-aware MIR。后续表示/MIR pass 只消费这些已验证 inputs，不得从 executor 初始状态注入原始 `target` 或 `capability-manifest` 冒充 resolver 结果。`BindCapabilitiesAndFreezeExactEffects` 在 structural MIR 之后从实际 intrinsic 产出 `bound-capability-closure` 和 frozen exact effects；available catalog 与程序实际绑定闭包不得使用同一个名称或 hash。每个 pass 都声明输入 schema、输出 schema、读取/新增的 fact 和是否会引入 call/safepoint/throw/suspend。pass 不得改变可观察求值顺序；effect freeze 后不得引入新 capability/safepoint/throw，root placement 后不得运行会隐藏引用 lifetime 或引入新 safepoint 的 MIR pass。每步可独立 dump/diff，且有正常、malformed 和循环 specialization golden。
+
+Phase 2A 的 executable pass state 必须把 resolver 输入/输出保存为带 schema、canonical bytes 和 digest 的 typed envelope/fact store，并在 resolver 之后同时保留 HIR、BuildPlan、TargetContext、DataLayout 与 available catalog。仅保存 `[]string` fact 标签不能作为 capability 或 provenance proof；post-verifier 必须从 envelope 内容独立重算 digest、manifest binding 和 join invariant。
 
 ## 10. Verifier 规则
 
@@ -269,7 +271,7 @@ reason, requiredCapability
 - operator 与 checker 解析类型一致。
 - call 的参数数、rest、this、selected overload 一致。
 - C 类型节点不产生 runtime value。
-- R/S2 capability 缺失时不生成可执行 HIR。
+- 缺失 source lowerer 或 semantic proof 时不生成 HIR；S2 的 runtime/ABI availability 在 `ResolveTargetContext` 后验证，HIR 只保留 logical capability requirement。
 - unsafe/dynamic op 有 provenance。
 
 ### MIR verifier
@@ -328,13 +330,17 @@ const animals: ReadonlyArray<Animal> = dogs;
 
 ## 13. 序列化与兼容性
 
-HIR 与 MIR 使用分层 provenance：
+HIR 与 MIR 使用分层 provenance；这些字段都属于 canonical content hash，不能只放在日志或外部 sidecar：
 
 ```text
-HIR: schema version, typescript-go commit, FrontendSnapshot/source hashes
+HIR: schema version, FrontendSnapshot schema/hash, canonical source hashes,
+     typescript-go commit, standard-library hash, Kind-manifest hash
 MIR: HIR provenance + BuildPlan digest + TargetContext hash
-     + toolchain/runtime/ABI/layout/capability manifest digests
-     + resolved target triple/data layout
+     + toolchain/runtime/ABI/layout/available-capability manifest digests
+     + resolved target triple + authoritative LLVM DataLayout/hash
+     + BoundCapabilityClosure digest + exact-effect digest
 ```
+
+HIR canonical hash 必须覆盖全部 provenance；缺失、未知 schema major 或格式错误均由 verifier 拒绝。`RepresentationPlan` join pre-verifier 必须验证 HIR 的 `FrontendSnapshotHash` 与 `BuildPlan.FrontendHash` 相同，并验证 resolver output 与 BuildPlan 请求一致；replay/post-verifier 也必须交叉核对来源 plan，不能只在篡改后重新计算 HIR hash。MIR 构造把 available catalog 与后续 bound closure 分别哈希。
 
 reader 只保证读取同一 major IR version。缓存命中必须比较全部 digest；不能只比较源文件时间戳。

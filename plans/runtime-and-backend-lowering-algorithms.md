@@ -24,7 +24,7 @@ dynamic = disabled
 2. LLVM backend 只翻译已验证 MIR，不重新决定 overload、方差、对象 shape、异常语义或 capability。
 3. runtime ABI 只接受明确 RepType/descriptor，不能以裸 `i8*` 绕过 GC、alignment 和类型检查。
 4. 所有可能分配、抛出、挂起或进入外部代码的位置必须在 effect 和 safepoint 表中可见。
-5. `BuildPlan` 只是 `canonical`、未解析的 backend request；Phase 2A 必须先用锁定 toolchain/runtime manifests 解析 `TargetContext`，再开始 RepresentationPlan 或 MIR。
+5. `BuildPlan` 只是 `canonical`、未解析的 backend request；Phase 2A 必须先用锁定 toolchain/runtime manifests 和 LLVM `TargetMachine` 解析不可变 `TargetContext`，再开始 RepresentationPlan 或 MIR。
 6. LLVM verifier 成功只是结构正确的必要条件；仍需 runtime differential、sanitizer 和目标机测试。
 7. Rust runtime 只暴露版本化 `extern "C"` ABI；Rust panic、引用、trait object 和标准库容器不得跨边界，普通失败以 status/exception handle 回到 MIR。
 
@@ -48,14 +48,16 @@ Capability {
 }
 ```
 
+resolver 输出的 `AvailableCapabilityCatalog` 是所选 runtime manifest 声明的可用实现索引、manifest hash 和约束集合；它不等于某个程序实际使用的 capability 闭包。structural MIR 之后，`BindRuntimeCapabilities` 才从 intrinsic 引用递归计算 `BoundCapabilityClosure`，并冻结实际 symbol、ABI hash 与 effect。source/HIR lowering 只能记录 logical capability requirements，不能提前宣称 exact effects。
+
 binding 算法：
 
 1. HIR/MIR intrinsic 使用 logical name，不直接拼接链接符号。
-2. capability binding pass 只在 `TargetContext` 选定的 runtime manifest 中解析 profile 和 target 下唯一实现。
+2. capability binding pass 只在 `TargetContext` 选定的 runtime manifest 和 `AvailableCapabilityCatalog` 中解析 profile、target 下唯一实现，并产出 `BoundCapabilityClosure`。
 3. 比较 RepType signature、calling convention、ownership、exception 和 GC contract。
 4. 递归闭合 `requiredFeatures`，检测环和版本冲突。
 5. 把解析后的 symbol 与 ABI hash 固化到 MIR artifact。
-6. 链接前再次读取目标 runtime manifest 并比较完整闭包。
+6. 链接前再次读取目标 runtime manifest 并比较完整闭包；不得重新解析 `TargetContext`。
 
 缺失能力必须在 backend 前诊断，不能等 undefined symbol。
 
@@ -72,7 +74,7 @@ TaggedValue(tag, payload), StatusCode
 
 public runtime ABI 中的 boolean 用 `i8`，避免不同 C ABI 对 `i1` 的分歧。string 默认传 GC-owned `StringRef`；只读无逃逸调用可传 `Utf16View`，其 lifetime 写入签名。
 
-这里的 C ABI 指调用约定和固定布局，不限定实现语言为 C。Rust 侧所有公共结构使用 `#[repr(C)]`，所有导出函数使用带 ABI major 的 `extern "C"` symbol；Rust 内部随即转换到 safe implementation。`bingo-abi` schema 是 Rust header、Go backend 描述和 LLVM layout 的单一生成来源。
+这里的 C ABI 指调用约定和固定布局，不限定实现语言为 C。Rust 侧所有公共结构使用 `#[repr(C)]`，所有导出函数使用带 ABI major 的 `extern "C"` symbol；Rust 内部随即转换到 safe implementation。`bingo-abi` schema 是 Rust header、Go backend ABI 描述和 layout cross-check manifest 的单一生成来源；具体 target DataLayout 仍以 LLVM `TargetMachine` 查询值为权威，不能由 ABI schema 覆盖。
 
 ## 3. TargetContext 解析
 
@@ -80,7 +82,9 @@ public runtime ABI 中的 boolean 用 `i8`，避免不同 C ABI 对 `i1` 的分�
 
 ```text
 ResolveTargetContext(BuildPlan, ToolchainManifest, RuntimeManifest)
-    -> immutable TargetContext | target/toolchain/runtime diagnostic
+    -> immutable TargetContext + authoritative DataLayout
+       + AvailableCapabilityCatalog
+       | target/toolchain/runtime diagnostic
 ```
 
 解析必须验证 target triple、CPU/features、LLVM major、object format、data layout、runtime/ABI 版本、GC/EH profile 和所请求 feature 的兼容性；不得从 host 默认路径或临时探测结果静默补全。构建 `TargetContext` 时固定：
@@ -107,7 +111,7 @@ TargetContext {
 }
 ```
 
-所有 size/alignment/offset 通过 LLVM `DataLayout` 或同源布局模块计算，禁止手写假定 64 位。raw frontend snapshot cache 与 target 无关；`BuildPlan` 冻结请求，`TargetContext` 冻结已解析实现。`RepresentationPlan`、RepType layout、MIR、LLVM 和 object emission 只能读取 `TargetContext`，其 cache 必须包含 TargetContext hash；解析失败时不得生成占位 layout 或 MIR。
+LLVM `TargetMachine` 查询的 DataLayout 字符串和结构化布局值是唯一权威来源。`ToolchainManifest` 记录 expected DataLayout/hash，ABI layout manifest 只做交叉校验；任一 mismatch 都 fail closed，不能用 manifest 值覆盖 LLVM 返回值。所有 size/alignment/offset 通过该 DataLayout 计算，禁止手写假定 64 位。raw frontend snapshot cache 与 target 无关；`BuildPlan` 冻结请求，`TargetContext` 冻结已解析实现。`RepresentationPlan`、RepType layout、MIR、LLVM 和 object emission 只能读取同一个 `TargetContext`/DataLayout，其 cache 必须包含 TargetContext hash；解析失败时不得生成占位 layout 或 MIR。
 
 缓存键分层且不可互换：
 
@@ -324,7 +328,7 @@ root audit 同时作用于最终 MIR 和优化后的 LLVM：每个 safepoint 都
 
 ### 5.5 WeakRef 与 finalizer
 
-weak reference 不作为 mark root。标记完成后先清不可达 target，再把 FinalizationRegistry job 加入 microtask queue；callback 时序和“一定执行”不能作保证。未实现 weak/finalization capability 时相关标准库声明仍可被 checker 看见，但 subset gate 拒绝值使用。
+weak reference 不作为 mark root。标记完成后先清不可达 target，再把 FinalizationRegistry job 加入 microtask queue；callback 时序和“一定执行”不能作保证。未实现 weak/finalization lowerer 时 source subset gate 拒绝值使用；若 lowerer 已存在但所选 runtime 缺 capability，则由 ResolveTargetContext 后的 target capability gate 拒绝。
 
 ## 6. Module graph 与初始化
 
@@ -495,7 +499,7 @@ Generator frame 保存 `SuspendedStart/Executing/SuspendedYield/Completed`、loc
 6. `await using` 的 dispose 结果进入 async 状态机。
 7. 多重失败构造 SuppressedError 链，保持原异常顺序。
 
-没有 symbol/disposable/async capability 时 subset gate 拒绝。
+缺少 symbol/disposable/async 的 source lowerer 或 semantic proof 时 subset gate 拒绝；lowerer 已存在但所选 runtime/ABI capability 不可用时，由 ResolveTargetContext 后的 target capability gate 拒绝。
 
 ## 12. 标准库调用选择
 
@@ -620,7 +624,7 @@ specialization 必须在 target layout 和 MIR 前达到 fixed point；`ResolveT
 
 ## 19. 目标文件与链接
 
-1. 创建 LLVM TargetMachine，核对 module triple/data layout。
+1. 复用 ResolveTargetContext 已创建并绑定 hash 的 LLVM TargetMachine，核对 module triple/data layout；链接阶段不得重新选择 target 或创建第二个 authoritative layout。
 2. 发射 object 而非把文本 IR 当最终产物。
 3. 根据 bound MIR intrinsic 计算 capability 闭包，选择 target/profile/feature/ABI hash 匹配的唯一预构建 Rust umbrella `staticlib`；首版不把 Rust bitcode 或跨语言 LTO 当作发布契约。
 4. 链接 startup object、module/self-hosted stdlib objects、该 umbrella archive、manifest 明确的可选外部引擎 archives 和显式 host libraries。

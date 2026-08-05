@@ -11,7 +11,7 @@
     "version": "7.1.0-dev",
     "patch": {
       "path": "patches/typescript-go/ts2bin.patch",
-      "sha256": "759e0661a91c7b757a78106425618046dc0b8e348f2c1e31263f486c074a9c9f",
+      "sha256": "cc4c9ab435810a23d31a1c1c72b040ae9241fbbadf1c041c6815df7266339e95",
       "baseCommit": "12318e599d21f516defea3b20e5d44b9369da723"
     },
     "stdlib": {

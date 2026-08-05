@@ -166,18 +166,29 @@ audit level and reviewers
 实现顺序固定为：
 
 ```text
-Program/checker -> immutable snapshot -> subset gate
-  -> HIR -> HIR verifier -> MIR -> MIR verifier
-  -> capability binding -> LLVM verifier -> link/run
+Program/checker -> immutable FrontendSnapshot
+  -> ResolveBuildPlan(FrontendSnapshot, buildConfig)
+  -> source subset gate(FrontendSnapshot)
+  -> target-independent SourceTypePlan -> typed HIR -> HIR verifier
+
+BE-001a + RT-002a + canonical BuildPlan
+  -> ResolveTargetContext
+  -> immutable TargetContext + authoritative LLVM TargetMachine DataLayout
+  -> AvailableCapabilityCatalog
+
+typed HIR + TargetContext + AvailableCapabilityCatalog
+  -> RepresentationPlan -> target-aware MIR -> structural MIR verifier
+  -> BindRuntimeCapabilities -> BoundCapabilityClosure + exact effects
+  -> LLVM verifier -> link/run (with the same immutable TargetContext)
 ```
 
-优先完成一个小而完整的纵切，例如 `add(number, number)`、单个 primitive runtime call 或一个只读数组协变例子。不得先做一个只覆盖 AST 的“大 visitor”，再把类型、effect、cleanup 和 ABI 留到后面。
+`FrontendSnapshot` 到 typed HIR 的工作与 `BE-001a`、`RT-002a` 可以并行；只有 `ResolveTargetContext` 成功后，才能建立 `RepresentationPlan` 或 target-aware MIR。source/HIR lowering 只记录 logical capability requirements；structural MIR 之后才允许从实际 intrinsic 绑定 `BoundCapabilityClosure` 并冻结精确 effect。优先完成一个小而完整的纵切，例如 `add(number, number)`。不得先做一个只覆盖 AST 的“大 visitor”，再把类型、effect、cleanup 和 ABI 留到后面。
 
 ### 5.3 代码实现约束
 
 - 所有 checker 查询集中在 facade；获取 checker 必须有 `defer done()` 或等价的 panic-safe release。
 - snapshot 只保存稳定 DTO；不能保存 tsgo 内部指针、地址或依赖 `TypeToString` 的身份。
-- HIR 保留源语义，MIR 显式化 CFG、布局、转换、异常边和 cleanup；不能从 TypeScript AST 直接构造 LLVM。
+- HIR 保留源语义并绑定 `FrontendSnapshot` provenance；MIR 显式化 CFG、布局、转换、异常边和 cleanup，并绑定 `BuildPlan`/`TargetContext` provenance。HIR 不得绕过 `ResolveTargetContext` 和 `RepresentationPlan` 直接进入 MIR，也不能从 TypeScript AST 直接构造 LLVM。
 - 每一个 `checked_cast`、`unsafeCast`、DynamicBoundary 和 external call 都记录 source origin、effect 和 provenance。
 - 新标准库成员必须同时更新 declaration candidate、capability manifest、ABI hash、正例和缺失 capability 负例。
 - 新 AST Kind 必须更新 Kind manifest、handler、支持级别和至少一个测试；未分类 Kind 使构建失败。

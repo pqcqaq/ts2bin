@@ -1,6 +1,6 @@
 # ts2bin
 
-`ts2bin` is a TypeScript-to-native compiler project built around `typescript-go`, a target-independent frontend wire snapshot, Bingo typed HIR, target-aware MIR, LLVM, and a Rust C ABI runtime. The 2026-08-05 direction audit kept that architecture and added a Phase 1.5 lowering-contract gate. The frontend/wire implementation, regression, reproducible patch, official-remote clean checkout, and WSL toolchain gates are now closed; `FND-004a` only awaits an authorized parent commit/HEAD clean-clone proof before the first number-only real-LLVM vertical slice. Broad syntax expansion stays blocked until that vertical slice passes; see [the audit](plans/development-audit-2026-08-05.md) and [implementation backlog](plans/implementation-backlog.md).
+`ts2bin` is a TypeScript-to-native compiler project built around `typescript-go`, a target-independent frontend wire snapshot, Bingo typed HIR, target-aware MIR, LLVM, and a Rust C ABI runtime. The direction audit kept that architecture and added a Phase 1.5 lowering-contract gate. A second contract audit made `ResolveTargetContext` an explicit pass, bound typed HIR to frontend provenance, and separated manifest-available capabilities from the exact post-MIR bound closure. The current patch is reproducible and isolated full test/vet verification passed; only the final parent-HEAD clean-clone proof remains before the first number-only real-LLVM vertical slice. Broad syntax expansion stays blocked until that slice passes. See [the audit](plans/development-audit-2026-08-05.md) and [implementation backlog](plans/implementation-backlog.md).
 
 ## Locked Toolchain
 
@@ -52,7 +52,7 @@ npm run build
 go test ./...
 ```
 
-The Phase 1 frontend exposes `version`, `check`, `snapshot`, `compatibility`, `doctor`, and staged `test` commands. Reproduce its focused checks from the `typescript-go` directory. Compatibility fixtures and semantic digests use schema v2; the intentional UTF-8 wire normalization changes were reviewed, regenerated, and locked by canonical round-trip tests. `BuildPlan` is a canonical unresolved backend request; Phase 2A must bind it through manifest-driven `ResolveTargetContext` before representation planning, MIR, or LLVM.
+The Phase 1 frontend exposes `version`, `check`, `snapshot`, `compatibility`, `doctor`, and staged `test` commands. Reproduce its focused checks from the `typescript-go` directory. Compatibility fixtures and semantic digests use schema v2; the intentional UTF-8 wire normalization changes were reviewed, regenerated, and locked by canonical round-trip tests. `BuildPlan` is a canonical unresolved backend request. Phase 2A resolves it once into an immutable `TargetContext`, LLVM-authoritative `DataLayout`, and `AvailableCapabilityCatalog` before representation planning or MIR; structural MIR binding then produces the exact `BoundCapabilityClosure` used by LLVM and link.
 
 ```powershell
 go test ./internal/tsfrontend ./cmd/ts2bin

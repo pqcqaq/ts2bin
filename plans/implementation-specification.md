@@ -38,7 +38,7 @@
 | 默认字符串 | UTF-16 code unit |
 | 默认方差 | 函数参数逆变、返回协变、可写位置不变 |
 
-当前 `ts2bin.lock.json` 已记录 snapshot schema 2、no-EH 默认值和最终 patch SHA-256；compatibility/snapshot/options baseline 的有意 UTF-8 wire 变化已审查并通过回归。doctor materialized-exact、官方 remote shallow clean checkout apply/full test/vet/cleanup 与 WSL smoke 已通过；只剩获授权 parent commit/HEAD clean-clone 证明，不能用未提交工作树代替。第一条纵切使用 `exceptions=none`；`llvm-eh` 仍是明确 `unavailable` 的未来 capability，status/native-unwind 契约须在进入异常实现前单独冻结。
+当前 `ts2bin.lock.json` 已记录 snapshot schema 2、no-EH 默认值和最终 patch SHA-256；compatibility/snapshot/options baseline 的有意 UTF-8 wire 变化已审查并通过回归。doctor materialized-exact、官方 remote shallow clean checkout apply/full test/vet/cleanup 与 WSL smoke 已通过；只剩获授权 parent commit/HEAD clean-clone 证明，不能用未提交工作树代替。第一条纵切使用 `exceptions=none`；`ResolveBuildPlan` 对 `llvm-eh` 的早期拒绝只表示当前 no-EH lowering/schema 边界，不是工具链可用性探测。status/native-unwind 契约须在进入异常实现前单独冻结，其他 target/runtime availability 统一留给 `TC-001a`。
 
 禁止以“tsgo parser 能解析”代替“Bingo 可以生成安全本机代码”。支持级别仍使用 S0/S1/S2/C/P/R。
 
@@ -56,8 +56,8 @@ Compile(BuildRequest req):
   frontendSnapshotKey = HashFrontendSnapshot(snapshot)
 
   buildConfig = NormalizeBuildConfig(req)
-  buildPlan = ResolveBuildPlan(buildConfig) // defaults/canonicalization only
-  diagnostics += RunSourceSubsetGate(snapshot, buildPlan)
+  buildPlan = ResolveBuildPlan(snapshot, buildConfig) // canonical unresolved request only
+  diagnostics += RunSourceSubsetGate(snapshot)
   if diagnostics.hasError:
       return TS/BINGO diagnostics + optional snapshot
 
@@ -73,16 +73,22 @@ Compile(BuildRequest req):
   ValidateVarianceAndConversions(hir)
   VerifyHIR(hir)
 
-  targetContext = ResolveTargetContext(
+  targetContext, dataLayout, availableCapabilityCatalog = ResolveTargetContext(
       buildPlan, LoadToolchainManifest(), LoadRuntimeManifest())
   if targetContext.hasUnavailableOrIncompatibleRequest:
       return target/toolchain/runtime diagnostics
-  capabilitySet = LoadAndValidateCapabilities(targetContext)
-  diagnostics += RunTargetCapabilityGate(hir, targetContext, capabilitySet)
+  diagnostics += RunTargetCapabilityGate(
+      hir, targetContext, availableCapabilityCatalog)
   if diagnostics.hasError:
       return BINGO capability diagnostics
 
-  representationPlan = BuildTargetRepresentationPlan(hir, targetContext)
+  verifiedJoin = VerifyRepresentationJoin(
+      hir, buildPlan, targetContext, dataLayout, availableCapabilityCatalog)
+  if verifiedJoin.hasProvenanceOrBindingMismatch:
+      return BINGO internal/provenance diagnostic
+
+  representationPlan = BuildTargetRepresentationPlan(
+      verifiedJoin, targetContext, dataLayout, availableCapabilityCatalog)
   if representationPlan.hasUnrepresentableLayoutOrABI:
       return BINGO representation diagnostics
 
@@ -90,10 +96,10 @@ Compile(BuildRequest req):
   mir = LowerCleanupExceptionAndAsyncState(mir, targetContext.exceptionProfile)
   VerifyStructuralMIR(mir)
 
-  bound = BindRuntimeCapabilities(mir, capabilitySet)
+  bound = BindRuntimeCapabilities(mir, availableCapabilityCatalog)
   if bound.hasMissingSymbolOrABIMismatch:
       return BINGO capability diagnostics
-  bound = FreezeExactEffects(bound)
+  bound = FreezeExactEffects(bound) // produces BoundCapabilityClosure and exact effects
 
   optimized = OptimizeProvenMIR(bound)
   rooted = PlaceGCRootsAndFreezeCleanup(optimized, targetContext.gcProfile)
@@ -116,6 +122,10 @@ Compile(BuildRequest req):
       externalEngineArchives, targetContext)
   return artifact + provenance(frontendSnapshotKey, buildArtifactKey)
 ~~~
+
+`RunSourceSubsetGate` 只能判断 snapshot 是否具备当前 lowerer 所需的 target-independent 语义事实。BigInt、RegExp 等尚无 source lowerer 时在此报告 `subset.lowerer_unavailable`；“所选 runtime 不提供 capability”只能由 `ResolveTargetContext` 之后的 target capability gate 报告。`ResolveTargetContext` 可以与 HIR 链并行，返回的 `AvailableCapabilityCatalog` 是 manifest 声明的可用实现目录，不是程序实际使用能力的精确闭包；`VerifyRepresentationJoin` 才交叉核对 HIR `FrontendSnapshotHash`、`BuildPlan.FrontendHash` 与 resolver request/context hashes，后者只有在 structural MIR 完成后才能由 `BindRuntimeCapabilities` 计算为 `BoundCapabilityClosure`。
+
+`targetContext.llvmDataLayout` 必须来自为已解析 target 创建的 LLVM `TargetMachine` 查询结果。toolchain manifest 记录预期 DataLayout 文本/hash，ABI layout manifest 做独立交叉校验；任一不一致都 fail closed，manifest 或 ABI schema 均不得覆盖 LLVM 返回值。Phase 2A pass state 必须使用带 canonical bytes/digest 的 typed resolver envelope/fact store，同时保留 HIR、BuildPlan、manifests、TargetContext、DataLayout 和 catalog；裸 fact 名称没有证明力。`LinkWithLLD` 接收同一个不可变 `TargetContext` 及其 hash，只重新校验 manifests/artifacts，不得再次解析或选择 target。
 
 任何失败都必须归属一个明确层：
 
@@ -197,7 +207,8 @@ Gate(node):
   switch entry.level:
     S0: require registered executable lowering handler and representable type
     S1: require registered executable desugaring handler and side-effect test
-    S2: require enabled runtime capability and ABI
+    S2: require a registered logical-capability lowering handler and record
+        the requirement; defer runtime/ABI availability to target resolution
     C:  require compile-time normalization; forbid runtime value
     P:  reject unless named experimental feature is enabled
     R:  emit stable rejection diagnostic
@@ -211,7 +222,7 @@ Gate(node):
     cleanup/exception support
 ~~~
 
-Gate 不能只看 AST Kind；同一个 CallExpression 可能是 S0 direct call、S2 runtime call、interop FFI 或 R dynamic call。最终决定依赖 resolved signature、source/target type、effect、profile 和 capability。
+Gate 不能只看 AST Kind；同一个 CallExpression 可能是 S0 direct call、S2 runtime call、interop FFI 或 R dynamic call。`RunSourceSubsetGate(snapshot)` 只依据 resolved signature、source type、前端 profile、lowerer readiness 和 snapshot semantic proof 作 target-independent 判断；它不得读取 runtime manifest，也不得把 target capability 失败写入 `FrontendSnapshot`。target type、runtime profile 和 capability availability 由 `ResolveTargetContext` 之后的 target capability gate 判断。
 
 ## 5. Lowering Context
 
@@ -225,7 +236,7 @@ LoweringContext:
   ExpectedTsType, ExpectedRepType
   EvaluationMode
   ExceptionRegion, SuspendRegion
-  Profile, CapabilitySet
+  SourceProfile, LogicalCapabilityRequirements
   Origin
 ~~~
 
@@ -278,11 +289,14 @@ FrontendSnapshot
   -> generic specialization worklist to fixed point
   -> variance/conversion validation
   -> Phase 2A ResolveTargetContext(BuildPlan, toolchain/runtime manifests)
+  -> immutable TargetContext + authoritative LLVM TargetMachine DataLayout
+     + AvailableCapabilityCatalog
   -> target RepresentationPlan: layout + calling convention
   -> HIR-to-MIR evaluation order + CFG/SSA lowering
   -> cleanup / exception-profile / async-state lowering
   -> structural MIR verification
-  -> runtime capability binding and exact effect freeze
+  -> runtime capability binding
+     -> BoundCapabilityClosure + exact effect freeze
   -> proven MIR simplification / devirtualization / escape analysis
   -> GC root placement and cleanup freeze
   -> final MIR verification
@@ -291,7 +305,7 @@ FrontendSnapshot
 
 Kind manifest 中的未来 `LoweringPlan` 文本不是 handler readiness 证明。S0/S1 只有在当前 compiler build 的 lowerer registry 已绑定 handler、声明 snapshot payload/schema 版本且存在对应 golden 时才可 accept；缺失 semantic reference 或 checker proof 是 `BINGO9000` 级内部失败，不能由 gate 跳过。
 
-specialization 使用确定性 worklist；任何 desugaring 或实例化产生的新 `InstantiationKey` 都必须继续迭代到 fixed point。`BuildPlan` 不能直接供表示规划读取；Phase 2A 必须先用锁定的 toolchain/runtime manifests 解析出 `TargetContext`。进入 target RepresentationPlan 前不得选择对象 offset、tag payload、pointer width 或 calling convention；进入 MIR 后不得残留未实例化 type parameter。structural verifier 先证明 CFG/SSA、RepType、layout 和 cleanup 结构，final verifier 再证明 bound capability、精确 effect、safepoint root 和冻结后的 cleanup。
+specialization 使用确定性 worklist；任何 desugaring 或实例化产生的新 `InstantiationKey` 都必须继续迭代到 fixed point。`BuildPlan` 不能直接供表示规划读取；Phase 2A 必须先用锁定的 toolchain/runtime manifests 与 LLVM `TargetMachine` 解析出不可变 `TargetContext`、权威 `DataLayout` 和 `AvailableCapabilityCatalog`。进入 target RepresentationPlan 前不得选择对象 offset、tag payload、pointer width 或 calling convention；进入 MIR 后不得残留未实例化 type parameter。structural verifier 先证明 CFG/SSA、RepType、layout 和 cleanup 结构；capability binding 再从实际 MIR intrinsic 计算 `BoundCapabilityClosure` 与精确 effect；final verifier 最后证明 closure、effect、safepoint root 和冻结后的 cleanup。
 
 每个 pass 必须声明：
 
@@ -406,7 +420,10 @@ internal/llvmbackend/
 x86_64-unknown-linux-gnu add(number, number)
   -> target-independent serialized snapshot
   -> SourceTypePlan + typed HIR
-  -> canonical BuildPlan + 已解析的最小 TargetContext
+  -> canonical unresolved BuildPlan
+  -> ResolveTargetContext
+     -> immutable TargetContext + authoritative LLVM TargetMachine DataLayout
+        + AvailableCapabilityCatalog
   -> target RepresentationPlan + verified MIR
   -> real tinygo.org/x/go-llvm + LLVM verifier
   -> object emission
@@ -417,7 +434,7 @@ x86_64-unknown-linux-gnu add(number, number)
 该纵切不依赖对象、GC、EH、self-hosted stdlib、async 或第二 target。实现顺序调整为：
 
 1. 完成 lowering-complete snapshot、snapshot-only HIR readiness 和本节 pass DAG 门禁。
-2. Phase 2A 先用锁定 toolchain/runtime manifests 实现最小 `ResolveTargetContext`，再把它接入 `number` 参数读取、加法、单 block return 的 HIR/MIR、structural/final verifier 和真实后端，完成 `VERT-001`。
+2. Phase 2A 让 target-independent `number` typed-HIR 链与 `BE-001a` LLVM TargetMachine/DataLayout、`RT-002a` empty runtime scaffold 并行推进；三路输入齐备后实现最小 `ResolveTargetContext`，再接入 RepresentationPlan、单 block MIR、structural/final verifier 和真实后端，最后完成 `VERT-001`。
 3. 在 Phase 2B 实现 local、direct call、branch/general CFG/SSA、loop、union narrowing、nullish、optional/logical 和 patterns。
 4. 冻结 `ObjectView`、object/class/closure layout 与 variance adapter，再引入 single-mutator GC v1。
 5. 实现 modules、generics、array/map/set/iterator 和 self-hosted stdlib。

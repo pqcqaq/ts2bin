@@ -78,7 +78,7 @@ flowchart LR
   U[bingo-rt umbrella] --> S
 ```
 
-`BuildPlan` 是绑定 `FrontendSnapshot` 的 canonical、不可变但尚未解析的 backend request；其中的 target、CPU/features、runtime、GC、异常和 LLVM 版本只表达用户请求，不证明本机或发布工具链可执行。`ResolveBuildPlan` 只负责默认值、规范化、校验和哈希。Phase 2A 必须调用 `ResolveTargetContext(BuildPlan, toolchain manifest, runtime manifest)`，验证请求并冻结 data layout、ABI、调用约定、异常/GC profile 及 manifest hash；失败时在表示规划前 fail closed。`RepresentationPlan`、MIR 和 LLVM backend 只能消费该 `TargetContext`，不能直接把 `BuildPlan` 当作已解析目标。
+`BuildPlan` 是绑定 `FrontendSnapshot` 的 canonical、不可变但尚未解析的 backend request；其中的 target、CPU/features、runtime、GC、异常和 LLVM 版本只表达用户请求，不证明本机或发布工具链可执行。`ResolveBuildPlan(FrontendSnapshot, buildConfig)` 只负责默认值、规范化、校验和哈希。Phase 2A 必须调用 `ResolveTargetContext(BuildPlan, toolchain manifest, runtime manifest)`，验证请求并冻结 immutable TargetContext、LLVM TargetMachine 的权威 DataLayout、ABI、调用约定、异常/GC profile、manifest hash 与 `AvailableCapabilityCatalog`；失败时在表示规划前 fail closed。`RepresentationPlan`、MIR 和 LLVM backend 只能消费这些 resolver 结果，不能直接把 `BuildPlan` 当作已解析目标。structural MIR 后 capability binding 才生成程序实际使用的 `BoundCapabilityClosure`。
 
 `bingo-rt` 使用 Rust 实现，并为每个 target/profile/feature set 预编译一个 umbrella `staticlib`（`.a`/`.lib`）。workspace 内部 crate 使用 Rust `rlib` 依赖关系，不把多个各自携带 Rust 传递依赖的 `staticlib` 混链；BigInt、RegExp、ICU 等独立外部引擎可由 capability 闭包额外选择。LLVM 生成代码只通过版本化 `extern "C"` ABI 调用 runtime；用户对象、self-hosted stdlib object、startup object、唯一 umbrella runtime 和显式外部引擎 archive 最终由 LLD 链接。Rust ABI、trait object、panic 和 Rust 标准库容器不得进入 Bingo public ABI；详细契约见 [rust-runtime-and-linking.md](rust-runtime-and-linking.md)。
 

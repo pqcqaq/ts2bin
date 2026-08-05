@@ -6,7 +6,7 @@
 - 当前父仓库位于 `main`，审计时 HEAD 为 `5f44799d9f6c1fa0770f26dcd811180f9afa721b`，已有 5 个提交且与 `origin/main` 对齐。
 - Node.js：`v22.22.0`；Go：`1.26.0`；Rust：`1.97.1`。
 - npm registry 当前 TypeScript 稳定版：`7.0.2`（查询日期：2026-08-03）。
-- `typescript-go/` 已作为 Git submodule 纳入父仓库；父仓库暂存的 gitlink 和 lock 都指向上游 `12318e599d21f516defea3b20e5d44b9369da723`，内部版本为 `7.1.0-dev`。Phase 1 代码仍是 submodule 内 dirty/untracked 修改，`.gitmodules` 仍指向微软官方 remote，因此 clean clone 尚不能复现该实现；这是 `FND-004` 阻断项。
+- `typescript-go/` 已作为 Git submodule 纳入父仓库；当前 parent gitlink 指向上游 `12318e599d21f516defea3b20e5d44b9369da723`，内部版本为 `7.1.0-dev`。二次审计后的 dirty/untracked 实现已重新生成 binary patch，lock hash 与 doctor materialized-exact 一致，official remote isolated full test/vet/cleanup 已通过；只有从包含这些交付物的 parent HEAD clean clone 复验后，`FND-004` 才能关闭。
 - 直接执行 `npx tsc` 会命中 npm 上名为 `tsc` 的占位包，校验应使用 `npx -p typescript@latest tsc` 或项目本地依赖。
 
 ## 官方资料

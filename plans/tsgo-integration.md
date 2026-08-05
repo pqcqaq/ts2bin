@@ -275,7 +275,7 @@ SelectedOverloadIndex, CallingConventionClass
 }
 ```
 
-上例是 Phase 2A 无异常首切的用户配置，不等于 frontend snapshot identity；`exceptions=none` 不得编译任何可抛路径。CLI 未显式传 override 时必须完整保留 `tsconfig.bingoOptions`；显式 `--profile` 只改 profile。Normalize 后再把 source-profile/front-end fields 与 target/runtime/build fields 分别写入 `FrontendSnapshot` 和未解析 `BuildPlan`；工具链/runtime 可用性留给 Phase 2A `ResolveTargetContext`。首个可抛异常 profile 仍按架构要求单独冻结为 status-code/result，`llvm-eh` 继续保持 unavailable。
+上例是 Phase 2A 无异常首切的用户配置，不等于 frontend snapshot identity；`exceptions=none` 不得编译任何可抛路径。CLI 未显式传 override 时必须完整保留 `tsconfig.bingoOptions`；显式 `--profile` 只改 profile。Normalize 后再把 source-profile/front-end fields 与 target/runtime/build fields 分别写入 `FrontendSnapshot` 和未解析 `BuildPlan`；工具链/runtime 可用性留给 Phase 2A `ResolveTargetContext`。当前 `ResolveBuildPlan` 早期拒绝 `llvm-eh` 只冻结 no-EH lowering/schema 边界，不表示它负责探测 runtime/toolchain；首个可抛异常 profile 仍按架构要求单独冻结为 status-code/result，`llvm-eh` 继续保持 unavailable。
 
 `gc=tracing` 是 general static profile 的默认值，因为普通对象、闭包和集合允许形成循环引用。`gc=arc` 只能由受限 profile 显式开启，并且必须经过无环、无弱引用、无 dynamic Proxy 的可证明性检查；无法证明时在 subset gate 报错，不得静默退化为泄漏语义。
 

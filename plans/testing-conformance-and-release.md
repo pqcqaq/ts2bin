@@ -274,7 +274,9 @@ ts2bin doctor      # tsgo/LLVM/runtime capability audit
 
 ```text
 P0  Phase 1.5: FE-008a/009a/010a/011a/011b, IR-000a, then FND-004a
-P0  Phase 2A: IR-001a..005a/007a, RT-002a, BE-001/002a/004a, REL-001a/002a, VERT-001
+P0  Phase 2A: (IR-007a -> IR-001a -> IR-002a -> IR-003a) || BE-001a || RT-002a
+    -> TC-001a
+    -> IR-004a/005a + RT-002b + BE-002a/004a -> REL-001a -> VERT-001 -> REL-002a
 P1  Phase 2B: full IR-001..008 primitive/control-flow contracts
 P2  OBJ/MOD/RT/GC/EH/ADV feature groups in backlog dependency order
 P3  full BE/REL productization, second target, broad fuzz/performance/release matrices

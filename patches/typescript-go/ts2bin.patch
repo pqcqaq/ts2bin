@@ -2021,19 +2021,22 @@ index 0000000000000000000000000000000000000000..4ca79886b1518c4c248f140940c09313
 +}
 diff --git a/internal/ast2bingo/pass_binding.go b/internal/ast2bingo/pass_binding.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..f7c1bc7775403f402b340e6c314127df1bf7d6ba
+index 0000000000000000000000000000000000000000..9c24604b96f2b948974d7fc9688bfe55e855f09e
 --- /dev/null
 +++ b/internal/ast2bingo/pass_binding.go
-@@ -0,0 +1,459 @@
+@@ -0,0 +1,506 @@
 +package ast2bingo
 +
 +import (
 +	"bytes"
 +	"context"
++	"crypto/sha256"
++	"encoding/hex"
 +	"encoding/json"
 +	"fmt"
 +	"io"
 +	"slices"
++	"strings"
 +
 +	"github.com/microsoft/typescript-go/internal/bingo"
 +	"github.com/microsoft/typescript-go/internal/frontendwire"
@@ -2062,9 +2065,10 @@ index 0000000000000000000000000000000000000000..f7c1bc7775403f402b340e6c314127df
 +// primitiveTypedHIRArtifact is the terminal production artifact for Phase
 +// 1.5. No MIR or target representation is claimed by this boundary.
 +type primitiveTypedHIRArtifact struct {
-+	SchemaVersion uint32          `json:"schemaVersion"`
-+	Events        []LoweringEvent `json:"events"`
-+	HIR           bingo.HIRModule `json:"hir"`
++	SchemaVersion        uint32          `json:"schemaVersion"`
++	FrontendSnapshotHash string          `json:"frontendSnapshotHash"`
++	Events               []LoweringEvent `json:"events"`
++	HIR                  bingo.HIRModule `json:"hir"`
 +}
 +
 +func executePrimitiveHIRPasses(ctx context.Context, snapshot ProgramSnapshot) (primitiveTypedHIRArtifact, bingo.PassExecution, error) {
@@ -2297,13 +2301,22 @@ index 0000000000000000000000000000000000000000..f7c1bc7775403f402b340e6c314127df
 +	if err != nil {
 +		return primitiveTypedHIRArtifact{}, err
 +	}
-+	hir := bingo.HIRModule{SchemaVersion: bingo.HIRSchemaVersion, Functions: []bingo.HIRFunction{function}}
++	hir := bingo.HIRModule{
++		SchemaVersion: bingo.HIRSchemaVersion,
++		Provenance:    primitiveHIRProvenance(plan.Snapshot),
++		Functions:     []bingo.HIRFunction{function},
++	}
 +	_, hirHash, err := bingo.CanonicalHIR(hir)
 +	if err != nil {
 +		return primitiveTypedHIRArtifact{}, err
 +	}
 +	hir.ContentHash = hirHash
-+	return primitiveTypedHIRArtifact{SchemaVersion: primitiveTypedHIRSchemaVersion, Events: events, HIR: hir}, nil
++	return primitiveTypedHIRArtifact{
++		SchemaVersion:        primitiveTypedHIRSchemaVersion,
++		FrontendSnapshotHash: plan.SnapshotContentHash,
++		Events:               events,
++		HIR:                  hir,
++	}, nil
 +}
 +
 +func verifyPrimitiveTypedHIRArtifact(plan primitiveSourceTypePlan, artifact primitiveTypedHIRArtifact) error {
@@ -2312,6 +2325,9 @@ index 0000000000000000000000000000000000000000..f7c1bc7775403f402b340e6c314127df
 +	}
 +	if artifact.SchemaVersion != primitiveTypedHIRSchemaVersion {
 +		return fmt.Errorf("unsupported primitive typed HIR artifact schema %d", artifact.SchemaVersion)
++	}
++	if artifact.FrontendSnapshotHash != plan.SnapshotContentHash || artifact.HIR.Provenance != primitiveHIRProvenance(plan.Snapshot) {
++		return fmt.Errorf("primitive HIR provenance does not match its source plan")
 +	}
 +	if err := bingo.VerifyCanonicalHIR(artifact.HIR); err != nil {
 +		return fmt.Errorf("verify canonical primitive HIR: %w", err)
@@ -2418,6 +2434,37 @@ index 0000000000000000000000000000000000000000..f7c1bc7775403f402b340e6c314127df
 +	return nil
 +}
 +
++func primitiveHIRProvenance(snapshot ProgramSnapshot) bingo.HIRProvenance {
++	return bingo.HIRProvenance{
++		FrontendSnapshotSchemaVersion: snapshot.SchemaVersion,
++		FrontendSnapshotHash:          snapshot.ContentHash,
++		SourceContentHash:             primitiveSourceContentHash(snapshot),
++		TypeScriptGoCommit:            snapshot.Provenance.TypeScriptGoCommit,
++		StandardLibraryHash:           snapshot.Provenance.StandardLibraryHash,
++		KindManifestHash:              snapshot.Provenance.KindManifestHash,
++	}
++}
++
++func primitiveSourceContentHash(snapshot ProgramSnapshot) string {
++	files := slices.Clone(snapshot.Files)
++	slices.SortStableFunc(files, func(left, right frontendwire.FileSnapshot) int {
++		if order := strings.Compare(string(left.ID), string(right.ID)); order != 0 {
++			return order
++		}
++		return strings.Compare(left.CanonicalPath, right.CanonicalPath)
++	})
++	digest := sha256.New()
++	for _, file := range files {
++		_, _ = digest.Write([]byte(file.ID))
++		_, _ = digest.Write([]byte{0})
++		_, _ = digest.Write([]byte(file.CanonicalPath))
++		_, _ = digest.Write([]byte{0})
++		_, _ = digest.Write([]byte(file.ContentHash))
++		_, _ = digest.Write([]byte{0})
++	}
++	return hex.EncodeToString(digest.Sum(nil))
++}
++
 +func indexPrimitiveSnapshot(snapshot ProgramSnapshot) snapshotSemanticFactIndexes {
 +	indexes := snapshotSemanticFactIndexes{
 +		Nodes:      make(map[NodeID]NodeSnapshot, len(snapshot.Nodes)),
@@ -2486,10 +2533,10 @@ index 0000000000000000000000000000000000000000..f7c1bc7775403f402b340e6c314127df
 +}
 diff --git a/internal/ast2bingo/pass_binding_test.go b/internal/ast2bingo/pass_binding_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..b44cc325a3b8430e33884b0eaa7c48e9fbf9851b
+index 0000000000000000000000000000000000000000..78ead02aff8bb3a5952d9b6b73d22315906588dc
 --- /dev/null
 +++ b/internal/ast2bingo/pass_binding_test.go
-@@ -0,0 +1,181 @@
+@@ -0,0 +1,191 @@
 +package ast2bingo
 +
 +import (
@@ -2575,6 +2622,16 @@ index 0000000000000000000000000000000000000000..b44cc325a3b8430e33884b0eaa7c48e9
 +				return marshalPrimitivePassTestArtifact(t, value)
 +			},
 +			want: "add operation does not match source plan",
++		},
++		{
++			name: "rehashed frontend provenance",
++			mutate: func(value primitiveTypedHIRArtifact) json.RawMessage {
++				value.HIR.Provenance.FrontendSnapshotHash = strings.Repeat("1", 64)
++				value.FrontendSnapshotHash = value.HIR.Provenance.FrontendSnapshotHash
++				rehashPrimitiveHIRTestArtifact(t, &value)
++				return marshalPrimitivePassTestArtifact(t, value)
++			},
++			want: "provenance does not match its source plan",
 +		},
 +		{
 +			name: "rehashed type",
@@ -2673,10 +2730,10 @@ index 0000000000000000000000000000000000000000..b44cc325a3b8430e33884b0eaa7c48e9
 +}
 diff --git a/internal/ast2bingo/replay.go b/internal/ast2bingo/replay.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..fabe9a4cfcfd3fb8a2dcb99dd260d9ad9c1aa6ee
+index 0000000000000000000000000000000000000000..472d4958ef72220d49367a39966e1da68dc8b66d
 --- /dev/null
 +++ b/internal/ast2bingo/replay.go
-@@ -0,0 +1,727 @@
+@@ -0,0 +1,739 @@
 +package ast2bingo
 +
 +import (
@@ -2720,10 +2777,11 @@ index 0000000000000000000000000000000000000000..fabe9a4cfcfd3fb8a2dcb99dd260d9ad
 +
 +// SnapshotReplayResult is the complete output of snapshot-only lowering.
 +type SnapshotReplayResult struct {
-+	SchemaVersion uint32          `json:"schemaVersion"`
-+	Events        []LoweringEvent `json:"events"`
-+	HIR           bingo.HIRModule `json:"hir"`
-+	ContentHash   string          `json:"contentHash"`
++	SchemaVersion        uint32          `json:"schemaVersion"`
++	FrontendSnapshotHash string          `json:"frontendSnapshotHash"`
++	Events               []LoweringEvent `json:"events"`
++	HIR                  bingo.HIRModule `json:"hir"`
++	ContentHash          string          `json:"contentHash"`
 +}
 +
 +// CanonicalBytes verifies the replay identity before returning the stable
@@ -2731,6 +2789,12 @@ index 0000000000000000000000000000000000000000..fabe9a4cfcfd3fb8a2dcb99dd260d9ad
 +func (r SnapshotReplayResult) CanonicalBytes() ([]byte, error) {
 +	if r.SchemaVersion != 1 {
 +		return nil, fmt.Errorf("unsupported replay schema %d", r.SchemaVersion)
++	}
++	if r.FrontendSnapshotHash == "" || r.FrontendSnapshotHash != r.HIR.Provenance.FrontendSnapshotHash {
++		return nil, fmt.Errorf("replay frontend snapshot hash does not match HIR provenance")
++	}
++	if err := bingo.VerifyCanonicalHIR(r.HIR); err != nil {
++		return nil, fmt.Errorf("verify replay HIR: %w", err)
 +	}
 +	withoutHash := r
 +	withoutHash.ContentHash = ""
@@ -3127,7 +3191,12 @@ index 0000000000000000000000000000000000000000..fabe9a4cfcfd3fb8a2dcb99dd260d9ad
 +	if err != nil {
 +		return SnapshotReplayResult{}, err
 +	}
-+	result := SnapshotReplayResult{SchemaVersion: 1, Events: artifact.Events, HIR: artifact.HIR}
++	result := SnapshotReplayResult{
++		SchemaVersion:        1,
++		FrontendSnapshotHash: artifact.FrontendSnapshotHash,
++		Events:               artifact.Events,
++		HIR:                  artifact.HIR,
++	}
 +	encoded, err := json.Marshal(result)
 +	if err != nil {
 +		return SnapshotReplayResult{}, err
@@ -3406,10 +3475,10 @@ index 0000000000000000000000000000000000000000..fabe9a4cfcfd3fb8a2dcb99dd260d9ad
 +}
 diff --git a/internal/ast2bingo/replay_test.go b/internal/ast2bingo/replay_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..97a2436eb47dd24305e6d8c5fc7ec01102bc4e62
+index 0000000000000000000000000000000000000000..e49b5d810b85bb65a6a20c7db6cfbc54dfb8c760
 --- /dev/null
 +++ b/internal/ast2bingo/replay_test.go
-@@ -0,0 +1,438 @@
+@@ -0,0 +1,441 @@
 +package ast2bingo
 +
 +import (
@@ -3451,6 +3520,9 @@ index 0000000000000000000000000000000000000000..97a2436eb47dd24305e6d8c5fc7ec011
 +	}
 +	if !isDigest(first.HIR.ContentHash) || !isDigest(first.ContentHash) {
 +		t.Fatalf("replay hashes are incomplete: HIR=%q replay=%q", first.HIR.ContentHash, first.ContentHash)
++	}
++	if first.FrontendSnapshotHash != snapshot.ContentHash || first.HIR.Provenance != primitiveHIRProvenance(*snapshot) {
++		t.Fatalf("replay frontend provenance = %#v / %q", first.HIR.Provenance, first.FrontendSnapshotHash)
 +	}
 +	_, wantHIRHash, err := bingo.CanonicalHIR(first.HIR)
 +	if err != nil {
@@ -3850,10 +3922,10 @@ index 0000000000000000000000000000000000000000..97a2436eb47dd24305e6d8c5fc7ec011
 +}
 diff --git a/internal/bingo/ir.go b/internal/bingo/ir.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..d975319cefb316a4621eae7a9b6fdda83db4b1fe
+index 0000000000000000000000000000000000000000..4f5742c99e993737f44d84d9d055e1d1d9bfe004
 --- /dev/null
 +++ b/internal/bingo/ir.go
-@@ -0,0 +1,516 @@
+@@ -0,0 +1,572 @@
 +// Package bingo contains the target-independent primitive IR contracts.
 +// Frontend facts are consumed as values; this package never imports the live
 +// TypeScript checker or AST.
@@ -3870,6 +3942,9 @@ index 0000000000000000000000000000000000000000..d975319cefb316a4621eae7a9b6fdda8
 +const (
 +	// HIRSchemaVersion is the serialized typed-HIR contract.
 +	HIRSchemaVersion uint32 = 1
++	// HIRFrontendSnapshotSchemaVersion is the only frontend snapshot schema
++	// accepted by HIR v1. Supporting another major requires an explicit reader.
++	HIRFrontendSnapshotSchemaVersion uint32 = 2
 +	// MIRSchemaVersion is the serialized target-aware MIR contract.
 +	MIRSchemaVersion uint32 = 1
 +)
@@ -3888,6 +3963,18 @@ index 0000000000000000000000000000000000000000..d975319cefb316a4621eae7a9b6fdda8
 +	TypeString  TypeKind = "string"
 +	TypeVoid    TypeKind = "void"
 +)
++
++// HIRProvenance binds a typed-HIR artifact to the exact frontend snapshot and
++// external frontend inputs that produced it. A persisted HIR without this
++// record is not safe to reuse for a different source or checker baseline.
++type HIRProvenance struct {
++	FrontendSnapshotSchemaVersion uint32 `json:"frontendSnapshotSchemaVersion"`
++	FrontendSnapshotHash          string `json:"frontendSnapshotHash"`
++	SourceContentHash             string `json:"sourceContentHash"`
++	TypeScriptGoCommit            string `json:"typescriptGoCommit"`
++	StandardLibraryHash           string `json:"standardLibraryHash"`
++	KindManifestHash              string `json:"kindManifestHash"`
++}
 +
 +// Effect records the observable behavior of an operation.
 +type Effect string
@@ -3909,6 +3996,7 @@ index 0000000000000000000000000000000000000000..d975319cefb316a4621eae7a9b6fdda8
 +// HIRModule is the canonical typed-HIR artifact.
 +type HIRModule struct {
 +	SchemaVersion uint32        `json:"schemaVersion"`
++	Provenance    HIRProvenance `json:"provenance"`
 +	Functions     []HIRFunction `json:"functions"`
 +	ContentHash   string        `json:"contentHash"`
 +}
@@ -4004,6 +4092,9 @@ index 0000000000000000000000000000000000000000..d975319cefb316a4621eae7a9b6fdda8
 +func VerifyHIR(module HIRModule) error {
 +	if module.SchemaVersion != HIRSchemaVersion {
 +		return fmt.Errorf("unsupported HIR schema %d", module.SchemaVersion)
++	}
++	if err := validateHIRProvenance(module.Provenance); err != nil {
++		return fmt.Errorf("invalid HIR provenance: %w", err)
 +	}
 +	functions := make(map[FunctionID]struct{}, len(module.Functions))
 +	for _, function := range module.Functions {
@@ -4283,6 +4374,43 @@ index 0000000000000000000000000000000000000000..d975319cefb316a4621eae7a9b6fdda8
 +	return origin.File != "" && origin.Start >= 0 && origin.End >= origin.Start
 +}
 +
++func validateHIRProvenance(provenance HIRProvenance) error {
++	if provenance.FrontendSnapshotSchemaVersion != HIRFrontendSnapshotSchemaVersion {
++		return fmt.Errorf(
++			"unsupported frontend snapshot schema %d, want %d",
++			provenance.FrontendSnapshotSchemaVersion,
++			HIRFrontendSnapshotSchemaVersion,
++		)
++	}
++	digests := []struct {
++		name  string
++		value string
++	}{
++		{name: "frontend snapshot", value: provenance.FrontendSnapshotHash},
++		{name: "source content", value: provenance.SourceContentHash},
++		{name: "standard library", value: provenance.StandardLibraryHash},
++		{name: "kind manifest", value: provenance.KindManifestHash},
++	}
++	for _, digest := range digests {
++		if len(digest.value) != sha256.Size*2 || !isLowerHex(digest.value) {
++			return fmt.Errorf("%s hash %q is not a lowercase SHA-256 digest", digest.name, digest.value)
++		}
++	}
++	if len(provenance.TypeScriptGoCommit) != 40 || !isLowerHex(provenance.TypeScriptGoCommit) {
++		return fmt.Errorf("TypeScript-go commit %q is not a lowercase commit", provenance.TypeScriptGoCommit)
++	}
++	return nil
++}
++
++func isLowerHex(value string) bool {
++	for _, char := range value {
++		if !(char >= '0' && char <= '9') && !(char >= 'a' && char <= 'f') {
++			return false
++		}
++	}
++	return true
++}
++
 +// VerifyMIR applies the same structural checks to the target-aware form.
 +func VerifyMIR(module MIRModule) error {
 +	if module.SchemaVersion != MIRSchemaVersion {
@@ -4372,20 +4500,34 @@ index 0000000000000000000000000000000000000000..d975319cefb316a4621eae7a9b6fdda8
 +}
 diff --git a/internal/bingo/ir_test.go b/internal/bingo/ir_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..4f57575e6a7071a3d61739a22fd7203ebc8fdf11
+index 0000000000000000000000000000000000000000..fef51f08d16355afb25cdfffcc8020f76bc465dc
 --- /dev/null
 +++ b/internal/bingo/ir_test.go
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,147 @@
 +package bingo
 +
-+import "testing"
++import (
++	"slices"
++	"testing"
++)
 +
 +func testOrigin(start, end int) Origin {
 +	return Origin{File: "main.ts", Start: start, End: end}
 +}
 +
++func testHIRProvenance() HIRProvenance {
++	return HIRProvenance{
++		FrontendSnapshotSchemaVersion: HIRFrontendSnapshotSchemaVersion,
++		FrontendSnapshotHash:          "1111111111111111111111111111111111111111111111111111111111111111",
++		SourceContentHash:             "2222222222222222222222222222222222222222222222222222222222222222",
++		TypeScriptGoCommit:            "3333333333333333333333333333333333333333",
++		StandardLibraryHash:           "4444444444444444444444444444444444444444444444444444444444444444",
++		KindManifestHash:              "5555555555555555555555555555555555555555555555555555555555555555",
++	}
++}
++
 +func TestVerifyHIRRejectsUndefinedOperand(t *testing.T) {
-+	module := HIRModule{SchemaVersion: HIRSchemaVersion, Functions: []HIRFunction{{
++	module := HIRModule{SchemaVersion: HIRSchemaVersion, Provenance: testHIRProvenance(), Functions: []HIRFunction{{
 +		ID: 1, Name: "add", ReturnType: TypeNumber, Origin: testOrigin(0, 3),
 +		Blocks: []HIRBlock{{ID: 1, Operations: []HIROp{{ID: 2, Kind: "binary", Type: TypeNumber, Operands: []ValueID{99, 100}, Operator: "+", Effect: EffectPure, Origin: testOrigin(1, 2)}}, Terminator: HIRTerminator{Kind: "return", Value: 2, Origin: testOrigin(2, 3)}}},
 +	}}}
@@ -4395,7 +4537,7 @@ index 0000000000000000000000000000000000000000..4f57575e6a7071a3d61739a22fd7203e
 +}
 +
 +func TestVerifyHIRAndCanonicalHash(t *testing.T) {
-+	module := HIRModule{SchemaVersion: HIRSchemaVersion, Functions: []HIRFunction{{
++	module := HIRModule{SchemaVersion: HIRSchemaVersion, Provenance: testHIRProvenance(), Functions: []HIRFunction{{
 +		ID: 1, Name: "add", ReturnType: TypeNumber, Origin: testOrigin(0, 32),
 +		Parameters: []HIRParameter{{Name: "a", Value: 1, Type: TypeNumber, Origin: testOrigin(10, 11)}, {Name: "b", Value: 2, Type: TypeNumber, Origin: testOrigin(13, 14)}},
 +		Blocks: []HIRBlock{{ID: 1,
@@ -4413,13 +4555,46 @@ index 0000000000000000000000000000000000000000..4f57575e6a7071a3d61739a22fd7203e
 +	if err := ValidatePassSequence(PassDAG); err != nil {
 +		t.Fatal(err)
 +	}
-+	if len(PassSpecs()) != 13 {
-+		t.Fatalf("pass spec count = %d, want 13", len(PassSpecs()))
++	if len(PassSpecs()) != 14 {
++		t.Fatalf("pass spec count = %d, want 14", len(PassSpecs()))
++	}
++}
++
++func TestPassContractRequiresResolvedTargetContext(t *testing.T) {
++	specs := PassSpecs()
++	resolveIndex := slices.IndexFunc(specs, func(spec PassSpec) bool { return spec.ID == PassResolveTarget })
++	representationIndex := slices.IndexFunc(specs, func(spec PassSpec) bool { return spec.ID == PassRepresentationPlan })
++	capabilityIndex := slices.IndexFunc(specs, func(spec PassSpec) bool { return spec.ID == PassCapabilityBinding })
++	if resolveIndex < 0 || representationIndex != resolveIndex+1 || capabilityIndex < representationIndex {
++		t.Fatalf("target/capability pass order = resolve %d, representation %d, capability %d", resolveIndex, representationIndex, capabilityIndex)
++	}
++	resolve := specs[resolveIndex]
++	if slices.Contains(resolve.ReadsFacts, "conversion-plan") {
++		t.Fatalf("target resolution is incorrectly serialized behind HIR conversion: %#v", resolve)
++	}
++	for _, fact := range []string{"target-context", "data-layout", "available-capability-catalog"} {
++		if !slices.Contains(resolve.WritesFacts, fact) {
++			t.Errorf("resolver does not produce %q: %#v", fact, resolve)
++		}
++	}
++	representation := specs[representationIndex]
++	if slices.Contains(representation.ReadsFacts, "target") {
++		t.Fatalf("representation plan still accepts an unverified target fact: %#v", representation)
++	}
++	for _, fact := range []string{"typed-hir", "canonical-build-plan", "target-context", "data-layout", "available-capability-catalog"} {
++		if !slices.Contains(representation.ReadsFacts, fact) {
++			t.Errorf("representation plan does not require %q: %#v", fact, representation)
++		}
++	}
++	capability := specs[capabilityIndex]
++	if !slices.Contains(capability.ReadsFacts, "available-capability-catalog") ||
++		!slices.Contains(capability.WritesFacts, "bound-capability-closure") {
++		t.Fatalf("capability catalog/closure boundary = %#v", capability)
 +	}
 +}
 +
 +func TestVerifyHIRRejectsNonDominatingValue(t *testing.T) {
-+	module := HIRModule{SchemaVersion: HIRSchemaVersion, Functions: []HIRFunction{{
++	module := HIRModule{SchemaVersion: HIRSchemaVersion, Provenance: testHIRProvenance(), Functions: []HIRFunction{{
 +		ID: 1, Name: "bad", ReturnType: TypeNumber, Origin: testOrigin(0, 10),
 +		Parameters: []HIRParameter{{Name: "condition", Value: 1, Type: TypeBoolean, Origin: testOrigin(0, 1)}},
 +		Blocks: []HIRBlock{
@@ -4436,13 +4611,36 @@ index 0000000000000000000000000000000000000000..4f57575e6a7071a3d61739a22fd7203e
 +
 +func TestVerifyHIRRejectsMalformedOperationAndDuplicateFunction(t *testing.T) {
 +	valid := HIRFunction{ID: 1, Name: "f", ReturnType: TypeNumber, Origin: testOrigin(0, 5), Parameters: []HIRParameter{{Name: "x", Value: 1, Type: TypeNumber, Origin: testOrigin(0, 1)}}, Blocks: []HIRBlock{{ID: 1, Operations: []HIROp{{ID: 2, Kind: "binary", Type: TypeNumber, Operands: []ValueID{1, 1}, Operator: "+", Effect: EffectPure, Origin: testOrigin(2, 3)}}, Terminator: HIRTerminator{Kind: "return", Value: 2, Origin: testOrigin(4, 5)}}}}
-+	duplicate := HIRModule{SchemaVersion: HIRSchemaVersion, Functions: []HIRFunction{valid, valid}}
++	duplicate := HIRModule{SchemaVersion: HIRSchemaVersion, Provenance: testHIRProvenance(), Functions: []HIRFunction{valid, valid}}
 +	if err := VerifyHIR(duplicate); err == nil {
 +		t.Fatal("duplicate function IDs were accepted")
 +	}
 +	valid.Blocks[0].Operations[0].Operator = "unknown"
-+	if err := VerifyHIR(HIRModule{SchemaVersion: HIRSchemaVersion, Functions: []HIRFunction{valid}}); err == nil {
++	if err := VerifyHIR(HIRModule{SchemaVersion: HIRSchemaVersion, Provenance: testHIRProvenance(), Functions: []HIRFunction{valid}}); err == nil {
 +		t.Fatal("unknown binary operator was accepted")
++	}
++}
++
++func TestVerifyHIRRejectsMissingOrMalformedFrontendProvenance(t *testing.T) {
++	function := HIRFunction{
++		ID: 1, Name: "identity", ReturnType: TypeNumber, Origin: testOrigin(0, 5),
++		Parameters: []HIRParameter{{Name: "value", Value: 1, Type: TypeNumber, Origin: testOrigin(0, 1)}},
++		Blocks:     []HIRBlock{{ID: 1, Terminator: HIRTerminator{Kind: "return", Value: 1, Origin: testOrigin(4, 5)}}},
++	}
++	missing := HIRModule{SchemaVersion: HIRSchemaVersion, Functions: []HIRFunction{function}}
++	if err := VerifyHIR(missing); err == nil {
++		t.Fatal("HIR without frontend provenance was accepted")
++	}
++	malformed := missing
++	malformed.Provenance = testHIRProvenance()
++	malformed.Provenance.FrontendSnapshotHash = "ABC"
++	if err := VerifyHIR(malformed); err == nil {
++		t.Fatal("HIR with malformed frontend provenance was accepted")
++	}
++	malformed.Provenance = testHIRProvenance()
++	malformed.Provenance.FrontendSnapshotSchemaVersion++
++	if err := VerifyHIR(malformed); err == nil {
++		t.Fatal("HIR with an unsupported frontend snapshot schema was accepted")
 +	}
 +}
 +
@@ -4455,10 +4653,10 @@ index 0000000000000000000000000000000000000000..4f57575e6a7071a3d61739a22fd7203e
 +}
 diff --git a/internal/bingo/pass.go b/internal/bingo/pass.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..fc40c935f7366a3e502d26dbe2f7aa09251c67af
+index 0000000000000000000000000000000000000000..439ead4de57b6d88cddb9ca1a27dfbe65cddb840
 --- /dev/null
 +++ b/internal/bingo/pass.go
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,138 @@
 +package bingo
 +
 +import "fmt"
@@ -4497,6 +4695,7 @@ index 0000000000000000000000000000000000000000..fc40c935f7366a3e502d26dbe2f7aa09
 +	PassEvaluationOrder    PassID = "evaluation-order-and-semantic-sugar"
 +	PassSpecialization     PassID = "specialization-fixed-point"
 +	PassVarianceAliasing   PassID = "variance-aliasing-and-conversions"
++	PassResolveTarget      PassID = "resolve-target-context"
 +	PassRepresentationPlan PassID = "target-representation-plan"
 +	PassMIRCFGSSA          PassID = "mir-cfg-ssa"
 +	PassCleanupState       PassID = "cleanup-exception-async-state"
@@ -4523,18 +4722,19 @@ index 0000000000000000000000000000000000000000..fc40c935f7366a3e502d26dbe2f7aa09
 +
 +var canonicalPassSpecs = [...]PassSpec{
 +	{ID: PassValidateSnapshot, InputSchema: "snapshot-v2", OutputSchema: "source-type-plan-v1", ReadsFacts: []string{"syntax", "types", "symbols", "signatures", "module-graph"}, WritesFacts: []string{"source-type-plan"}, PreservesEvaluationOrder: true},
-+	{ID: PassTypedHIR, InputSchema: "source-type-plan-v1", OutputSchema: "hir-v1", ReadsFacts: []string{"source-type-plan"}, WritesFacts: []string{"typed-hir"}, PreservesEvaluationOrder: true},
++	{ID: PassTypedHIR, InputSchema: "source-type-plan-v1", OutputSchema: "hir-v1", ReadsFacts: []string{"source-type-plan"}, WritesFacts: []string{"typed-hir", "effect-proof"}, PreservesEvaluationOrder: true},
 +	{ID: PassEvaluationOrder, InputSchema: "hir-v1", OutputSchema: "hir-v1", ReadsFacts: []string{"typed-hir"}, WritesFacts: []string{"evaluation-order"}, PreservesEvaluationOrder: true},
 +	{ID: PassSpecialization, InputSchema: "hir-v1", OutputSchema: "hir-v1", ReadsFacts: []string{"typed-hir", "type-arguments"}, WritesFacts: []string{"specialization-fixed-point"}, PreservesEvaluationOrder: true},
 +	{ID: PassVarianceAliasing, InputSchema: "hir-v1", OutputSchema: "hir-v1", ReadsFacts: []string{"specialization-fixed-point", "property-facts"}, WritesFacts: []string{"variance-proof", "conversion-plan"}, PreservesEvaluationOrder: true},
-+	{ID: PassRepresentationPlan, InputSchema: "hir-v1", OutputSchema: "rep-plan-v1", ReadsFacts: []string{"conversion-plan", "target"}, WritesFacts: []string{"representation-plan"}, PreservesEvaluationOrder: true},
++	{ID: PassResolveTarget, InputSchema: "hir-v1", OutputSchema: "target-context-v1", ReadsFacts: []string{"canonical-build-plan", "runtime-manifest", "toolchain-manifest"}, WritesFacts: []string{"target-context", "data-layout", "available-capability-catalog"}, PreservesEvaluationOrder: true},
++	{ID: PassRepresentationPlan, InputSchema: "target-context-v1", OutputSchema: "rep-plan-v1", ReadsFacts: []string{"available-capability-catalog", "canonical-build-plan", "conversion-plan", "data-layout", "target-context", "typed-hir"}, WritesFacts: []string{"representation-plan"}, PreservesEvaluationOrder: true},
 +	{ID: PassMIRCFGSSA, InputSchema: "rep-plan-v1", OutputSchema: "mir-v1", ReadsFacts: []string{"representation-plan", "evaluation-order"}, WritesFacts: []string{"mir-cfg", "ssa"}, PreservesEvaluationOrder: true},
-+	{ID: PassCleanupState, InputSchema: "mir-v1", OutputSchema: "mir-v1", ReadsFacts: []string{"mir-cfg", "effects"}, WritesFacts: []string{"cleanup-state"}, MayIntroduceEffects: []PassEffect{PassEffectAllocate, PassEffectCall, PassEffectRetainRelease, PassEffectSafepoint, PassEffectSuspend, PassEffectThrow}, PreservesEvaluationOrder: true},
++	{ID: PassCleanupState, InputSchema: "mir-v1", OutputSchema: "mir-v1", ReadsFacts: []string{"effect-proof", "mir-cfg"}, WritesFacts: []string{"cleanup-state"}, MayIntroduceEffects: []PassEffect{PassEffectAllocate, PassEffectCall, PassEffectRetainRelease, PassEffectSafepoint, PassEffectSuspend, PassEffectThrow}, PreservesEvaluationOrder: true},
 +	{ID: PassStructuralVerifier, InputSchema: "mir-v1", OutputSchema: "mir-v1", ReadsFacts: []string{"mir-cfg", "ssa", "cleanup-state"}, WritesFacts: []string{"verified-structural-mir"}, PreservesEvaluationOrder: true},
-+	{ID: PassCapabilityBinding, InputSchema: "mir-v1", OutputSchema: "mir-v1", ReadsFacts: []string{"verified-structural-mir", "capability-manifest"}, WritesFacts: []string{"frozen-effects"}, MayIntroduceEffects: []PassEffect{PassEffectAllocate, PassEffectBlock, PassEffectCall, PassEffectDynamic, PassEffectFFI, PassEffectHost, PassEffectIO, PassEffectNondeterministic, PassEffectRead, PassEffectRetainRelease, PassEffectSafepoint, PassEffectSuspend, PassEffectThrow, PassEffectWrite}, PreservesEvaluationOrder: true},
++	{ID: PassCapabilityBinding, InputSchema: "mir-v1", OutputSchema: "mir-v1", ReadsFacts: []string{"available-capability-catalog", "verified-structural-mir"}, WritesFacts: []string{"bound-capability-closure", "frozen-effects"}, MayIntroduceEffects: []PassEffect{PassEffectAllocate, PassEffectBlock, PassEffectCall, PassEffectDynamic, PassEffectFFI, PassEffectHost, PassEffectIO, PassEffectNondeterministic, PassEffectRead, PassEffectRetainRelease, PassEffectSafepoint, PassEffectSuspend, PassEffectThrow, PassEffectWrite}, PreservesEvaluationOrder: true},
 +	{ID: PassOptimizeProvenMIR, InputSchema: "mir-v1", OutputSchema: "mir-v1", ReadsFacts: []string{"frozen-effects", "verified-structural-mir"}, WritesFacts: []string{"optimized-mir"}, PreservesEvaluationOrder: true},
 +	{ID: PassPlaceGCRoots, InputSchema: "mir-v1", OutputSchema: "mir-v1", ReadsFacts: []string{"optimized-mir", "frozen-effects"}, WritesFacts: []string{"root-map", "frozen-cleanup"}, MayIntroduceEffects: []PassEffect{PassEffectRootPublication}, PreservesEvaluationOrder: true},
-+	{ID: PassFinalVerifier, InputSchema: "mir-v1", OutputSchema: "verified-mir-v1", ReadsFacts: []string{"root-map", "frozen-cleanup", "frozen-effects"}, WritesFacts: []string{"final-mir"}, PreservesEvaluationOrder: true},
++	{ID: PassFinalVerifier, InputSchema: "mir-v1", OutputSchema: "verified-mir-v1", ReadsFacts: []string{"bound-capability-closure", "root-map", "frozen-cleanup", "frozen-effects"}, WritesFacts: []string{"final-mir"}, PreservesEvaluationOrder: true},
 +}
 +
 +// PassDAG is a detached copy retained for callers that need to serialize the
@@ -4597,10 +4797,10 @@ index 0000000000000000000000000000000000000000..fc40c935f7366a3e502d26dbe2f7aa09
 +}
 diff --git a/internal/bingo/pass_driver.go b/internal/bingo/pass_driver.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..89dc71be62e3cc6a8ad9ce95967c704ec6fac865
+index 0000000000000000000000000000000000000000..c5e7395e4669507266e27783ae3b3de3765005b1
 --- /dev/null
 +++ b/internal/bingo/pass_driver.go
-@@ -0,0 +1,689 @@
+@@ -0,0 +1,692 @@
 +package bingo
 +
 +import (
@@ -4619,6 +4819,9 @@ index 0000000000000000000000000000000000000000..89dc71be62e3cc6a8ad9ce95967c704e
 +
 +// PassState is the immutable, serializable boundary passed between lowering
 +// stages. Artifact must be JSON so every stage can emit a deterministic dump.
++// Production currently stops at typed HIR; TC-001a must introduce a typed,
++// digested multi-artifact envelope before registering resolver/MIR handlers.
++// Facts are ordering metadata and never constitute target or capability proof.
 +type PassState struct {
 +	Schema   string          `json:"schema"`
 +	Facts    []string        `json:"facts"`
@@ -5941,116 +6144,123 @@ index 0000000000000000000000000000000000000000..de9e7160d44055100795dbacbea52249
 +}
 diff --git a/internal/bingo/testdata/pass_driver.golden.json b/internal/bingo/testdata/pass_driver.golden.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..6968e57aa657aaaf51b34ce63e77a59ac60e48dc
+index 0000000000000000000000000000000000000000..ee0c1d185313560699dcec21410aab57c170bc69
 --- /dev/null
 +++ b/internal/bingo/testdata/pass_driver.golden.json
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,107 @@
 +[
 +  {
 +    "sequence": 0,
 +    "pass": "validate-snapshot-source-type-plan",
 +    "iteration": 1,
 +    "schema": "source-type-plan-v1",
-+    "contentHash": "7f657deaf25d94d1f59365a22fea641eae6aa3f02835367b074dc5503de2dc24"
++    "contentHash": "672c292a212bd5a19ea827536f3fbaa2d77fa16e070cc7432b4f9e889eb7e915"
 +  },
 +  {
 +    "sequence": 1,
 +    "pass": "typed-hir",
 +    "iteration": 1,
 +    "schema": "hir-v1",
-+    "contentHash": "16e54189aaac004f25a3cb0d084bf229189484c9bba2fa2a322225c72c2425d3"
++    "contentHash": "16741fb36bf3d86198c9c3bc5f800d02f00bd52a9081d9b1676fdd3fc1a1109d"
 +  },
 +  {
 +    "sequence": 2,
 +    "pass": "evaluation-order-and-semantic-sugar",
 +    "iteration": 1,
 +    "schema": "hir-v1",
-+    "contentHash": "b0fd37fbb6b53d1d4bb19d280878cf4989d2b258fe72413b0f50caf5ed936f37"
++    "contentHash": "174a22d8d3317dd74a51bbdadca58a029b8fad4d3389e7866cf96cd7c0e59349"
 +  },
 +  {
 +    "sequence": 3,
 +    "pass": "specialization-fixed-point",
 +    "iteration": 1,
 +    "schema": "hir-v1",
-+    "contentHash": "a7e2065a4ec4fa6e9c7a1b602516095afe2a9ad189433cd011734ccd105245b0"
++    "contentHash": "56efec05ac9e9c71f3647d029ed72bf34ffcb7afc012263a25469cb2794da44c"
 +  },
 +  {
 +    "sequence": 3,
 +    "pass": "specialization-fixed-point",
 +    "iteration": 2,
 +    "schema": "hir-v1",
-+    "contentHash": "b0e5126b4fb08610aa3957c440aeb4bad3dd3702cd778af0d203e6bc433026a2"
++    "contentHash": "03b11bbdc7cf76d4945236830d308d2ab26fd721a479adb535490f23def330fc"
 +  },
 +  {
 +    "sequence": 4,
 +    "pass": "variance-aliasing-and-conversions",
 +    "iteration": 1,
 +    "schema": "hir-v1",
-+    "contentHash": "e7ede229d01b898a42f8878dee83a3edb68448ce5ccea0b177ced168d9c00b21"
++    "contentHash": "74b6b62ed0e8152e3de98262ceed2096b64fd92c8cc0d97281c05f1d596c0e11"
 +  },
 +  {
 +    "sequence": 5,
-+    "pass": "target-representation-plan",
++    "pass": "resolve-target-context",
 +    "iteration": 1,
-+    "schema": "rep-plan-v1",
-+    "contentHash": "403633bd2db3ace8c780f43dbc06e988f42d572d26b40c00f13191eefbb5a293"
++    "schema": "target-context-v1",
++    "contentHash": "243cfc55a91db00279fbac4c70306d15ee14d179f1aaabb1a53dd81384a75a73"
 +  },
 +  {
 +    "sequence": 6,
-+    "pass": "mir-cfg-ssa",
++    "pass": "target-representation-plan",
 +    "iteration": 1,
-+    "schema": "mir-v1",
-+    "contentHash": "289a0a577f0d372ff6202b6784aa68f831e428785067f27f078ae034f9c04e84"
++    "schema": "rep-plan-v1",
++    "contentHash": "ae2559f1f3d7e02a40cf75e2605aff939bbc548a25b2fe1d324747a4c3d25b8e"
 +  },
 +  {
 +    "sequence": 7,
-+    "pass": "cleanup-exception-async-state",
++    "pass": "mir-cfg-ssa",
 +    "iteration": 1,
 +    "schema": "mir-v1",
-+    "contentHash": "2732f3e903b799e8b9178f1126f131c798fe9093cf85b9131e0f45d36440fecf"
++    "contentHash": "9ecccd9880bd494de0dd5b3fea131890f23ae2f7fdf9c60a23e79b5bcfb2edcf"
 +  },
 +  {
 +    "sequence": 8,
-+    "pass": "structural-mir-verifier",
++    "pass": "cleanup-exception-async-state",
 +    "iteration": 1,
 +    "schema": "mir-v1",
-+    "contentHash": "91b33a015d12a73d1e630488f9d0cee01bb25532975b07aa5553b8a1176b18f0"
++    "contentHash": "92b36d996094ff8c692ea23a45ed468168d8b63e8a64cf2c0dff54ad37f04612"
 +  },
 +  {
 +    "sequence": 9,
-+    "pass": "capability-binding-effect-freeze",
++    "pass": "structural-mir-verifier",
 +    "iteration": 1,
 +    "schema": "mir-v1",
-+    "contentHash": "e37c6d8b0d4b75cdc0ae93009b7a4d5ccd827282616861c211a5cf4ca07cae19"
++    "contentHash": "0327fe6f42b84a9b82b2cea9e0085f494f9202d823dbd8d65155bf89e539dd58"
 +  },
 +  {
 +    "sequence": 10,
-+    "pass": "optimize-proven-mir",
++    "pass": "capability-binding-effect-freeze",
 +    "iteration": 1,
 +    "schema": "mir-v1",
-+    "contentHash": "648ae4f9407564243d3299252d047c8a9e1654d4f077ba9edf900030261053ea"
++    "contentHash": "2ebd2f9848d48cb2c4461fe491ba908306d13111a61891ea6a6af3a61d12a64a"
 +  },
 +  {
 +    "sequence": 11,
-+    "pass": "place-gc-roots-freeze-cleanup",
++    "pass": "optimize-proven-mir",
 +    "iteration": 1,
 +    "schema": "mir-v1",
-+    "contentHash": "54462ab945f9ff4ff6ae2bb9f746a8f3b21cd4c94d8b1d0db7014b0dca375e4f"
++    "contentHash": "cdede281c349469cb672d41cc46d2ce4fe1e2b71598825e552f3c381190c7180"
 +  },
 +  {
 +    "sequence": 12,
++    "pass": "place-gc-roots-freeze-cleanup",
++    "iteration": 1,
++    "schema": "mir-v1",
++    "contentHash": "1dd39d5060ac4f6734f13945849d5d9742a3eb34ea2cab613bd914f797bcd30b"
++  },
++  {
++    "sequence": 13,
 +    "pass": "final-verifier",
 +    "iteration": 1,
 +    "schema": "verified-mir-v1",
-+    "contentHash": "5e610c2bc85bd2920fbae74f8096bfaa4715d0085f9fd4ca321bd9780386eb9f"
++    "contentHash": "988073a554da6f18c8b357476aff9ebd3dcaa8a8f48ee1d0ddddc46754e0b161"
 +  }
 +]
 diff --git a/internal/bingo/testdata/pass_specs.golden.json b/internal/bingo/testdata/pass_specs.golden.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..a69b938ef3508864a9473efa0e213d11d8a51bc3
+index 0000000000000000000000000000000000000000..01291b58007312ea08faff99d489dfadde36969c
 --- /dev/null
 +++ b/internal/bingo/testdata/pass_specs.golden.json
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,58 @@
 +[
 +  {
 +    "id": "validate-snapshot-source-type-plan",
@@ -6058,7 +6268,7 @@ index 0000000000000000000000000000000000000000..a69b938ef3508864a9473efa0e213d11
 +  },
 +  {
 +    "id": "typed-hir",
-+    "contentHash": "da70a24f8292e0ae3711bc4504855f126bb7d8f8c1872d18b4fbae2ea45ee95d"
++    "contentHash": "d71dedcbe842ffe0d9fcbdb8a4a014996777b08750e7dbfc60017112aa4211fa"
 +  },
 +  {
 +    "id": "evaluation-order-and-semantic-sugar",
@@ -6073,8 +6283,12 @@ index 0000000000000000000000000000000000000000..a69b938ef3508864a9473efa0e213d11
 +    "contentHash": "6524d13bd162e181e109478c276718ce4a2b6d4f4d3df0a41ead373f8f8e2ca6"
 +  },
 +  {
++    "id": "resolve-target-context",
++    "contentHash": "003e6692e6d8841ba84e0a3dd5b45dbfb4717a55586c33a91e3c0252e797390a"
++  },
++  {
 +    "id": "target-representation-plan",
-+    "contentHash": "e5b5b59d2fa52281b81c08185fda20455344c51378ee874deb7002697d240f56"
++    "contentHash": "181d7280e5eb96cc95d67da2eb74ac2fc86eac994561bbbe53a06964c11defe4"
 +  },
 +  {
 +    "id": "mir-cfg-ssa",
@@ -6082,7 +6296,7 @@ index 0000000000000000000000000000000000000000..a69b938ef3508864a9473efa0e213d11
 +  },
 +  {
 +    "id": "cleanup-exception-async-state",
-+    "contentHash": "836d6b8d2308f4a01138ba1f76bb189ee36096e539dacebc1e1cbbad67a4e01f"
++    "contentHash": "42f8eaadc62f26c7f9dae9583d00520b14024940ca6895cabc8ac76e398563b3"
 +  },
 +  {
 +    "id": "structural-mir-verifier",
@@ -6090,7 +6304,7 @@ index 0000000000000000000000000000000000000000..a69b938ef3508864a9473efa0e213d11
 +  },
 +  {
 +    "id": "capability-binding-effect-freeze",
-+    "contentHash": "8d4db03e50bf63a4e4895e418e90a09f6a9b8b2a5d554c9d7854d20c0b23ec80"
++    "contentHash": "30658d77b97a33e30cda0d0a10757833835fb942705840a1ae3ae17105135247"
 +  },
 +  {
 +    "id": "optimize-proven-mir",
@@ -6102,7 +6316,7 @@ index 0000000000000000000000000000000000000000..a69b938ef3508864a9473efa0e213d11
 +  },
 +  {
 +    "id": "final-verifier",
-+    "contentHash": "acd6dfd2b5bea4e4770a702bbd72fceaba73300f09ff3b7c4296fd0c61245ab5"
++    "contentHash": "91c665973fb9f8e7e7d0e82328278d9351fa18996bf90975b65380ee6fe90a98"
 +  }
 +]
 diff --git a/internal/checker/exports.go b/internal/checker/exports.go
@@ -17586,7 +17800,7 @@ index 0000000000000000000000000000000000000000..72169e4ba9cbb185ea527a73617e9001
 +}
 diff --git a/internal/tsfrontend/compatibility_baseline.json b/internal/tsfrontend/compatibility_baseline.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..32e333314515dd46b4befa034022d8f9d2103bd8
+index 0000000000000000000000000000000000000000..4f07c34732d62f5e6a1a564241980dfac9fb8fac
 --- /dev/null
 +++ b/internal/tsfrontend/compatibility_baseline.json
 @@ -0,0 +1,21820 @@
@@ -39098,7 +39312,7 @@ index 0000000000000000000000000000000000000000..32e333314515dd46b4befa034022d8f9
 +    },
 +    {
 +      "key": "coverage/regexp",
-+      "value": "8acb6fe84c5c40f66349ffd0a5a9263b5f845d7230a3ea7dd1d3da8a937c14e8"
++      "value": "e87931eb7d13a942c55ee2ac05a5e66e3309f0f9204fc85e69d32ebb9264c986"
 +    },
 +    {
 +      "key": "coverage/runtime-namespace",
@@ -39226,7 +39440,7 @@ index 0000000000000000000000000000000000000000..32e333314515dd46b4befa034022d8f9
 +    },
 +    {
 +      "key": "literals/bigint",
-+      "value": "555f4fcf2cc9c503548212b583f01be037f2b38d4c6cb87e62be0ac1042ac872"
++      "value": "530a402676ce633a6cb93a0706fd529e189458006dbc74da8f44d677955103f2"
 +    },
 +    {
 +      "key": "literals/boolean",
@@ -54353,10 +54567,10 @@ index 0000000000000000000000000000000000000000..09eab0cef7c2c59f726ea36c5f7f02c5
 +}
 diff --git a/internal/tsfrontend/snapshot_fe009a_test.go b/internal/tsfrontend/snapshot_fe009a_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..901f216bdf3c26bd79534a1acad8880cd95862d1
+index 0000000000000000000000000000000000000000..608576146f9a2503518b5c9aeb660a0a7f78fdd2
 --- /dev/null
 +++ b/internal/tsfrontend/snapshot_fe009a_test.go
-@@ -0,0 +1,715 @@
+@@ -0,0 +1,717 @@
 +package tsfrontend
 +
 +import (
@@ -54421,7 +54635,9 @@ index 0000000000000000000000000000000000000000..901f216bdf3c26bd79534a1acad8880c
 +	if snapshot == nil {
 +		t.Fatalf("snapshot/diagnostics = %#v / %#v", snapshot, diagnostics)
 +	}
-+	if len(diagnostics) != 1 || diagnostics[0].Code != DiagnosticCodeDynamicProfileUnavailable || diagnostics[0].RequiredCapability != "runtime:regexp" {
++	if len(diagnostics) != 1 || diagnostics[0].Code != DiagnosticCodeUnsupportedSyntax ||
++		diagnostics[0].Stage != DiagnosticStageSubset || diagnostics[0].MessageKey != "subset.lowerer_unavailable" ||
++		diagnostics[0].RequiredCapability != "runtime:regexp" {
 +		t.Fatalf("regexp diagnostics = %#v", diagnostics)
 +	}
 +	if err := ValidateProgramSnapshot(*snapshot); err != nil {
@@ -56516,10 +56732,10 @@ index 0000000000000000000000000000000000000000..133cbe5068859c990d7a555fd36fff03
 +}
 diff --git a/internal/tsfrontend/subset_gate.go b/internal/tsfrontend/subset_gate.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..6da7639edf43fad9c1e23201ff7be3ae88b3925b
+index 0000000000000000000000000000000000000000..ae85116d0246f037e11c39ed874dc8c7702dc32f
 --- /dev/null
 +++ b/internal/tsfrontend/subset_gate.go
-@@ -0,0 +1,558 @@
+@@ -0,0 +1,568 @@
 +package tsfrontend
 +
 +import (
@@ -56544,7 +56760,10 @@ index 0000000000000000000000000000000000000000..6da7639edf43fad9c1e23201ff7be3ae
 +		return []Diagnostic{subsetGlobalDiagnostic(DiagnosticCodeInternalFailure, "subset.kind_manifest_invalid", err.Error())}
 +	}
 +	currentManifestDigest := KindManifestDigest()
-+	if snapshot.Provenance.KindManifestHash != "" && snapshot.Provenance.KindManifestHash != currentManifestDigest {
++	if snapshot.Provenance.KindManifestHash == "" {
++		return []Diagnostic{subsetGlobalDiagnostic(DiagnosticCodeInternalFailure, "subset.kind_manifest_hash_missing", currentManifestDigest)}
++	}
++	if snapshot.Provenance.KindManifestHash != currentManifestDigest {
 +		return []Diagnostic{subsetGlobalDiagnostic(DiagnosticCodeUnclassifiedASTKind, "snapshot.kind_manifest_hash_mismatch", snapshot.Provenance.KindManifestHash, currentManifestDigest)}
 +	}
 +
@@ -56661,8 +56880,15 @@ index 0000000000000000000000000000000000000000..6da7639edf43fad9c1e23201ff7be3ae
 +	return gateTypeFacts(node, entry, profile, facts)
 +}
 +
-+func gateCapabilityKind(node NodeSnapshot, entry KindManifestEntry, profile Profile, _ subsetFacts) *Diagnostic {
-+	diagnostic := subsetNodeDiagnostic(DiagnosticCodeDynamicProfileUnavailable, node, profile, "capability.runtime_missing", entry.Feature)
++func gateCapabilityKind(node NodeSnapshot, entry KindManifestEntry, profile Profile, facts subsetFacts) *Diagnostic {
++	if diagnostic := gateTypeFacts(node, entry, profile, facts); diagnostic != nil {
++		return diagnostic
++	}
++	// The source gate has no TargetContext and therefore cannot claim that a
++	// selected runtime lacks this capability. Until its HIR lowerer exists, use
++	// a target-independent subset diagnostic and preserve the logical capability
++	// only as planning metadata for the later target gate.
++	diagnostic := subsetNodeDiagnostic(DiagnosticCodeUnsupportedSyntax, node, profile, "subset.lowerer_unavailable", entry.Feature)
 +	diagnostic.RequiredCapability = entry.Capability
 +	return &diagnostic
 +}
@@ -57080,10 +57306,10 @@ index 0000000000000000000000000000000000000000..6da7639edf43fad9c1e23201ff7be3ae
 +}
 diff --git a/internal/tsfrontend/subset_gate_test.go b/internal/tsfrontend/subset_gate_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..99cb006654f2b061f2aceb8fa7ba8af40c2224b9
+index 0000000000000000000000000000000000000000..83b1894f27bf101a0f4f9c8770bcc7660215d9a7
 --- /dev/null
 +++ b/internal/tsfrontend/subset_gate_test.go
-@@ -0,0 +1,276 @@
+@@ -0,0 +1,286 @@
 +package tsfrontend
 +
 +import (
@@ -57097,9 +57323,18 @@ index 0000000000000000000000000000000000000000..99cb006654f2b061f2aceb8fa7ba8af4
 +func TestRunSubsetGateAcceptsEmptyPointerFreeSnapshot(t *testing.T) {
 +	t.Parallel()
 +
-+	got := RunSubsetGate(ProgramSnapshot{SchemaVersion: SnapshotSchemaVersion, Config: ConfigSnapshot{Bingo: BingoOptions{Profile: ProfileStatic}}, Nodes: []NodeSnapshot{}, Types: []TypeSnapshot{}})
++	got := RunSubsetGate(ProgramSnapshot{SchemaVersion: SnapshotSchemaVersion, Provenance: ProvenanceSnapshot{KindManifestHash: KindManifestDigest()}, Config: ConfigSnapshot{Bingo: BingoOptions{Profile: ProfileStatic}}, Nodes: []NodeSnapshot{}, Types: []TypeSnapshot{}})
 +	if got == nil || len(got) != 0 {
 +		t.Fatalf("diagnostics = %#v, want non-nil empty", got)
++	}
++}
++
++func TestRunSubsetGateRejectsMissingKindManifestHash(t *testing.T) {
++	t.Parallel()
++
++	diagnostics := RunSubsetGate(ProgramSnapshot{SchemaVersion: SnapshotSchemaVersion})
++	if len(diagnostics) != 1 || diagnostics[0].Code != DiagnosticCodeInternalFailure || diagnostics[0].MessageKey != "subset.kind_manifest_hash_missing" {
++		t.Fatalf("diagnostics = %#v", diagnostics)
 +	}
 +}
 +
@@ -57355,6 +57590,7 @@ index 0000000000000000000000000000000000000000..99cb006654f2b061f2aceb8fa7ba8af4
 +func gateSnapshot(nodes ...NodeSnapshot) ProgramSnapshot {
 +	return ProgramSnapshot{
 +		SchemaVersion: SnapshotSchemaVersion,
++		Provenance:    ProvenanceSnapshot{KindManifestHash: KindManifestDigest()},
 +		Config:        ConfigSnapshot{Bingo: BingoOptions{Profile: ProfileStatic}},
 +		Nodes:         nodes,
 +		Types:         []TypeSnapshot{},
@@ -58677,7 +58913,7 @@ index 0000000000000000000000000000000000000000..0bf144cafff39f0fe4f89a1b5ae5e8f9
 +export interface CoverageValue { value: number; }
 diff --git a/internal/tsfrontend/testdata/frontend/cases/coverage/regexp.case.json b/internal/tsfrontend/testdata/frontend/cases/coverage/regexp.case.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..f60e0684dba344ddbb4d93e8d180108dd7ce08fc
+index 0000000000000000000000000000000000000000..291f2abb6b08017116829aca322819d3e86ecc52
 --- /dev/null
 +++ b/internal/tsfrontend/testdata/frontend/cases/coverage/regexp.case.json
 @@ -0,0 +1,42 @@
@@ -58718,7 +58954,7 @@ index 0000000000000000000000000000000000000000..f60e0684dba344ddbb4d93e8d180108d
 +  "expect": {
 +    "checkCodes": [],
 +    "buildCodes": [
-+      "BINGO3002_RUNTIME_CAPABILITY_MISSING"
++      "BINGO1001_UNSUPPORTED_SYNTAX"
 +    ],
 +    "snapshot": true
 +  }
@@ -60206,7 +60442,7 @@ index 0000000000000000000000000000000000000000..c3b09cd3d9c7aaf60fc57ee1985a49e9
 +export const values: number[] = [1, 2, 3];
 diff --git a/internal/tsfrontend/testdata/frontend/cases/literals/bigint.case.json b/internal/tsfrontend/testdata/frontend/cases/literals/bigint.case.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..e0b829efc1f07648f11af0c54aa8b39d31609e9d
+index 0000000000000000000000000000000000000000..12ab0cb8dd73f5a53e3439ed28eda6be8b433410
 --- /dev/null
 +++ b/internal/tsfrontend/testdata/frontend/cases/literals/bigint.case.json
 @@ -0,0 +1,41 @@
@@ -60246,7 +60482,7 @@ index 0000000000000000000000000000000000000000..e0b829efc1f07648f11af0c54aa8b39d
 +  "expect": {
 +    "checkCodes": [],
 +    "buildCodes": [
-+      "BINGO3002_RUNTIME_CAPABILITY_MISSING"
++      "BINGO1001_UNSUPPORTED_SYNTAX"
 +    ],
 +    "snapshot": true
 +  }
@@ -62569,7 +62805,7 @@ index 0000000000000000000000000000000000000000..fa4c9da85a7690e21f1ec4096124e212
 +}
 diff --git a/internal/tsfrontend/testdata/frontend/goldens/diagnostics.golden.json b/internal/tsfrontend/testdata/frontend/goldens/diagnostics.golden.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..b6a82357ac096b342a168fcee9235ba110d256d8
+index 0000000000000000000000000000000000000000..f228c3b826606259b44b74479ce1a77937c16d0a
 --- /dev/null
 +++ b/internal/tsfrontend/testdata/frontend/goldens/diagnostics.golden.json
 @@ -0,0 +1,1590 @@
@@ -63169,16 +63405,16 @@ index 0000000000000000000000000000000000000000..b6a82357ac096b342a168fcee9235ba1
 +      "check": [],
 +      "build": [
 +        {
-+          "code": "BINGO3002_RUNTIME_CAPABILITY_MISSING",
++          "code": "BINGO1001_UNSUPPORTED_SYNTAX",
 +          "severity": "error",
 +          "category": "BINGO",
-+          "stage": "capability",
++          "stage": "subset",
 +          "primarySpan": {
 +            "file": "cases/coverage/regexp.ts",
 +            "start": 15,
 +            "end": 29
 +          },
-+          "messageKey": "capability.runtime_missing",
++          "messageKey": "subset.lowerer_unavailable",
 +          "arguments": [
 +            "regexp"
 +          ],
@@ -63552,16 +63788,16 @@ index 0000000000000000000000000000000000000000..b6a82357ac096b342a168fcee9235ba1
 +      "check": [],
 +      "build": [
 +        {
-+          "code": "BINGO3002_RUNTIME_CAPABILITY_MISSING",
++          "code": "BINGO1001_UNSUPPORTED_SYNTAX",
 +          "severity": "error",
 +          "category": "BINGO",
-+          "stage": "capability",
++          "stage": "subset",
 +          "primarySpan": {
 +            "file": "cases/literals/bigint.ts",
 +            "start": 28,
 +            "end": 33
 +          },
-+          "messageKey": "capability.runtime_missing",
++          "messageKey": "subset.lowerer_unavailable",
 +          "arguments": [
 +            "bigint"
 +          ],

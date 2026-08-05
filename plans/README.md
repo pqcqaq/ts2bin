@@ -31,12 +31,18 @@
 ```text
 TypeScript source
   -> typescript-go Program + Checker
-  -> immutable lowering-complete frontend snapshot
-  -> subset gate and diagnostics
-  -> Bingo HIR (TypeScript semantics preserved)
-  -> Bingo MIR (explicit control flow, layout, conversions, cleanup)
+  -> immutable lowering-complete FrontendSnapshot
+  -> canonical unresolved BuildPlan
+  -> subset gate and diagnostics (snapshot only)
+  -> target-independent Bingo HIR (TypeScript semantics preserved)
+  -> ResolveTargetContext(BuildPlan, locked toolchain/runtime manifests)
+  -> immutable TargetContext + authoritative LLVM TargetMachine DataLayout
+     + AvailableCapabilityCatalog
+  -> target-aware RepresentationPlan and Bingo MIR
+  -> structural verifier -> BindRuntimeCapabilities
+     -> BoundCapabilityClosure + exact effects
   -> LLVM IR
-  -> LLVM verifier / passes / target machine / linker
+  -> LLVM verifier / passes / linker (same resolved TargetContext)
 ```
 
 关键决策：
@@ -52,7 +58,7 @@ TypeScript source
 - 标准库采用“Rust 原语 + 受限 TypeScript 自举算法 + 可选重型引擎适配”三层结构；泛型自举代码以已验证 Bingo HIR/package 分发并按需实例化。
 - 普通 TypeScript 对象允许循环引用，general static profile 默认使用非移动 tracing GC；ARC/arena 只能作为有额外可证明约束的受限 profile。
 - `Array<T>` 的可变元素默认不变，`ReadonlyArray<T>` 和只读字段才允许协变；tsgo 的历史兼容性结果不能直接当作 Bingo 布局安全证明。
-- Phase 1.5 已形成 schema v2、wire 单一 validator、Kind shape/semantic-proof registry、target-independent `FrontendSnapshot`、canonical unresolved `BuildPlan`、checker-free replay，以及执行到 typed HIR 的 canonical production pass 前缀。`FE-008..011` 的实现、baseline 和全套 regression 已关闭；最终 patch/hash、doctor、官方 remote clean checkout full test/vet 与 WSL smoke 已通过，`FND-004a` 只剩获授权的 parent commit/HEAD clean-clone 证明。Phase 2A 先以 `ResolveTargetContext` 绑定 toolchain/runtime manifests、DataLayout 和 CapabilitySet，再进入 number-only MIR/real LLVM/object/LLD 纵切；纵切通过前，Phase 2B 和广泛语法保持 blocked。
+- Phase 1.5 已形成 schema v2、wire 单一 validator、Kind shape/semantic-proof registry、带 provenance 的 target-independent `FrontendSnapshot`、canonical unresolved `BuildPlan`、checker-free replay，以及执行到 typed HIR 的 canonical production pass 前缀。`FE-008..011` 的代码与既有回归已通过；当前 patch 已重生成并通过 doctor、official remote clean checkout、全仓 test/vet 和 cleanup，SHA-256 由 `ts2bin.lock.json` 锁定；只剩 parent HEAD clean-clone 证明。Phase 2A 先并行建立 `BE-001a`/`RT-002a`，再以 `ResolveTargetContext` 绑定 toolchain/runtime manifests、权威 DataLayout 和 `AvailableCapabilityCatalog`；target-aware MIR 之后才生成 `BoundCapabilityClosure`。number-only MIR/real LLVM/object/LLD 纵切通过前，Phase 2B 和广泛语法保持 blocked。
 
 ## 交付物与唯一事实来源
 

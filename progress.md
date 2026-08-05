@@ -248,13 +248,24 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - 新增 `FE-011b`：当前代码/default golden/lock 只接受未实现的 `llvm-eh`，与“首切无 EH、首个 throwing profile 为 status/result”的架构不一致。Phase 2A 前先引入 canonical no-EH mode；status-code/native-unwind 后续分别锁定，禁止把未实现 capability 写入 artifact provenance。
 - Phase 2A 改用 first-slice 子任务 `IR-001a..005a/007a`、`RT-002a`、`BE-002a`，避免完整 IR/runtime/backend issue 中的变量、调用、general CFG、bool/string/null、phi/memory 和完整 registry 验收反向拉入 `add(number, number)` 纵切。Phase 2B 继续负责这些扩展。
 
-## 2026-08-05 Phase 1.5 退出审计收口
+## 2026-08-05 Phase 1.5 退出审计收口（历史检查点，已由 2026-08-06 二次审计取代）
 
 - `FE-008a/009a` 已关闭：删除 capture 侧完整 serialized validator 与 shape registry 副本；`tsfrontend.ValidateProgramSnapshot` 只委托 `frontendwire`，fixture 增加 capture -> wire encode/decode/re-encode byte parity。
 - `FE-011b` 已关闭：默认、options golden、BuildPlan 和 `ts2bin.lock.json` 使用 `exceptions=none`；`llvm-eh` 只保留为未来常量并返回 `unavailable`。
 - `FE-011a` 路径身份已闭合：项目内 semantic paths 相对化；Windows/WSL 同根 snapshot bytes、TypeScriptDigest、ContentHash 一致。wire validator 在任何 digest/hash 比对前拒绝 config/options/source/module/diagnostic 中残留的 Windows drive、UNC 和 POSIX rooted disk path，真实跨盘 `rootDirs` Build 回归 fail closed。
 - UTF-8 baseline 已人工审查：Kind 351、API 4,893、stdlib 108 项零变化；100 个 semantic digest 中 28 个变化均来自 checker 合成符号名的有效 U+FFFD wire 规范化；snapshot contract golden 仅一处 U+FFFD 表达变化，config golden 不变。新增专门 canonical encode/decode/re-encode 测试。
 - 当前验证全绿：核心六包、核心六包 race、`go vet ./...`、frontend 九阶段（package/validator/module/checker/CLI/compatibility/race/shuffle/repeat）、`go test ./... -count=1`。此前 Windows watcher 时序失败本轮未复现，不能作为项目阻塞。
-- BuildPlan 语义已纠正：它是绑定 frontend hash 的 canonical unresolved request，不是 executable capability proof。架构/规格和代码注释统一要求 Phase 2A `ResolveTargetContext(toolchain manifest, runtime manifest)` 产出 TargetContext + DataLayout + CapabilitySet 后，RepresentationPlan/MIR/LLVM 才可继续。
-- 后续计划重排：`IR-007a` 先冻结 f64/NaN/-0/`+`；`BE-001a` Go-LLVM/TargetMachine 与 `RT-002a` Rust workspace/startup scaffold 并行；`TC-001a` 绑定首切唯一 capability；随后 `IR-001a..005a`、`RT-002b` 固定 `extern "C" double add(double,double)`/IEEE-754 bits harness、`BE-002a/004a`、`REL-001a`、`VERT-001`、`REL-002a`。
+- BuildPlan 语义已纠正：它是绑定 frontend hash 的 canonical unresolved request，不是 executable capability proof。此历史检查点中的 `CapabilitySet` 已由当前契约拆分为 resolver 的 `AvailableCapabilityCatalog` 与 structural MIR 后的 `BoundCapabilityClosure`；后续文档以二者为准。
+- 后续计划重排：当前依赖为 `IR-007a -> IR-001a -> IR-002a -> IR-003a` 与 `BE-001a`、`RT-002a` 并行；三路汇合到 `TC-001a` 后再做 `IR-004a/005a`、`RT-002b`、`BE-002a/004a`、`REL-001a`、`VERT-001`、`REL-002a`。
 - 最终 patch SHA-256 `759e0661a91c7b757a78106425618046dc0b8e348f2c1e31263f486c074a9c9f` 已生成；doctor materialized-exact、官方 remote shallow clean checkout apply/full test/vet/cleanup、WSL Go-LLVM verifier 和 Rust staticlib/LLD smoke 全部通过。当前唯一 Phase 1.5 交付阻塞是 `FND-004a` 的 parent commit/HEAD clean-clone 证明；未经用户授权不创建 commit，因此只能在提交后严格关闭。
+
+## 2026-08-06 契约二次审计（当前状态）
+
+本节取代上一个“Phase 1.5 退出审计收口”中的当前状态、旧 patch hash 和 Phase 2A 顺序；更早段落仅保留历史证据。
+
+- 总体架构不变：`FrontendSnapshot -> target-independent typed HIR -> ResolveTargetContext -> target-aware MIR -> LLVM/object -> Rust C ABI runtime + LLD`。
+- canonical pass DAG 已新增不可绕过的 `ResolveTargetContext`，并显式区分 `AvailableCapabilityCatalog` 与 structural MIR 后的 `BoundCapabilityClosure`。
+- typed HIR 已把 FrontendSnapshot schema/hash、source hash、tsgo commit、stdlib hash 与 Kind manifest hash 纳入 canonical provenance；replay/post-verifier 交叉校验来源 snapshot hash。
+- BigInt/RegExp 的 snapshot-time 诊断已改为 target-independent `subset.lowerer_unavailable`；runtime capability availability 留到 TargetContext 后判断。
+- Phase 2A 依赖改为并行的 `IR-007a -> IR-001a -> IR-002a -> IR-003a`、`BE-001a`、`RT-002a`，然后 `BE-001a + RT-002a + BuildPlan -> TC-001a -> IR-004a/005a`。LLVM TargetMachine 查询值是 DataLayout 权威源；link 只复验同一个 immutable TargetContext，不重新解析。
+- 二次审计后的 patch 已重生成，SHA-256 为 `cc4c9ab435810a23d31a1c1c72b040ae9241fbbadf1c041c6815df7266339e95`；doctor materialized-exact、official remote isolated apply/full test/vet/cleanup 已通过。`FND-004` 与 Phase 1.5 仅剩最终 parent HEAD clean clone 证明，完成前仍为 `acceptance-blocked`。

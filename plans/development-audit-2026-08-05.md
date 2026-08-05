@@ -13,7 +13,7 @@ typescript-go Program/Checker
   -> Rust runtime C ABI + LLD
 ```
 
-不需要改成从 AST 直接生成 LLVM，也不需要引入完整 JavaScript engine 作为 static profile 的基础。结论为 `conditional pass / FND-004a parent commit pending`：`FE-008/009/010/011` 的实现、baseline 和全套 regression 已闭合，`IR-000` 的 contract infrastructure 已通过；最终 patch/hash、官方 remote clean checkout 与 WSL smoke 也已通过，剩余门是获授权的 parent commit/HEAD clean-clone 证明。之后才进入 Phase 2A primitive real-LLVM 纵切，纵切闭合前绝不扩大语法面。当前详细证据和依赖调整以第 10 节为准。
+不需要改成从 AST 直接生成 LLVM，也不需要引入完整 JavaScript engine 作为 static profile 的基础。总体结论仍是 `conditional pass / parent HEAD proof pending`：代码层已补齐 resolver、HIR provenance 和 source/runtime diagnostic 分层，二次审计后的 patch/hash、doctor 与 official remote isolated full test/vet/cleanup 已通过；只剩 parent HEAD clean-clone 证据。之后才进入 Phase 2A primitive real-LLVM 纵切，纵切闭合前绝不扩大语法面。当前详细契约、证据状态和依赖调整以第 10 节及其后续验证记录为准。
 
 ## 2. 审计证据
 
@@ -21,7 +21,7 @@ typescript-go Program/Checker
 
 关键事实：
 
-- 父仓库 `.gitmodules` 仍指向微软官方仓库；root lock 已记录 upstream commit、最终 patch path/base/SHA-256。`doctor` 已恢复 materialized-exact，官方 remote shallow clean checkout 严格 apply 后 full test/vet/cleanup 通过；父仓库尚未获授权提交这些交付物，因此 parent HEAD clean-clone 仍是最后证据缺口。
+- 父仓库 `.gitmodules` 仍指向微软官方仓库；root lock 记录 upstream commit、当前 patch path/base/SHA-256。二次审计后的 `doctor` materialized-exact、official remote shallow clean checkout apply/full test/vet/cleanup 已通过；最终 parent HEAD clean clone 是剩余证据缺口。
 - `ts2bin.lock.json` 已迁移为 lock schema 2、snapshot schema 2，`reproducibilityStatus` 为 `reproducible-patch`；108 个 bundled lib、Go/LLVM/LLD 版本和 semantic baseline 均由锁与生成物约束。
 - `NodeSnapshot` 的 Kind-driven payload/role/arity shape registry 已加入，并把 NumericLiteral 空文本、BinaryExpression generic roles 等 overlay 反例纳入负例；wire validator 正在与 capture validator 收敛到同一 contract。
 - checker capture 的 panic/error fail-closed、assertion/non-null/flow/capture/property/signature/module facts、per-specifier module binding、callee-derived effect closure、lowerer mandatory-fact registry，以及 free/instance/static/constructor overload ownership/redirect 负例均已进入实现。assignment/destructuring/for-of round-trip 回归已闭合，完整 serialized validator 已收敛到 `frontendwire` 单一真源。
@@ -35,7 +35,7 @@ typescript-go Program/Checker
 
 | 项目 | 当前状态 | 证据 | 关闭条件 |
 | --- | --- | --- | --- |
-| `FND-004` | `implemented / acceptance-blocked` | 最终 patch/hash、doctor materialized-exact、官方 remote clean checkout full test/vet/cleanup 与 WSL smoke 通过 | 获授权提交正确 gitlink、lock、patch、scripts；从该 parent HEAD clean clone 重跑并记录证据 |
+| `FND-004` | `implemented / acceptance-blocked` | 当前 patch/hash、doctor materialized-exact、official remote clean checkout full test/vet/cleanup 通过 | 正确 gitlink/lock/patch/scripts 进入 parent HEAD，并从该 clean clone 完成全量证据 |
 | `FE-008` | `complete` | Kind shape registry、payload/role negative tests、wire 单一 serialized validator 与 full regression 通过 | 保持 wire 为唯一规则源；schema 变化继续走 migration gate |
 | `FE-009` | `complete` | module binding/effect registry/fixed-point/lowerer readiness、ownership/redirect 负例与 wire round-trip 通过 | 新 proof 必须同时有 capture 正例和 wire corruption 负例 |
 | `FE-010` | `complete` | checker-free wire/replay、依赖闭包、重复运行、evaluation-order/single-block HIR、篡改拒绝及 migration regression 通过 | 纳入最终 patch/clean delivery |
@@ -146,15 +146,15 @@ GC v1 先做 single-mutator、stop-the-world、non-moving tracing。每个 safep
 3. `FE-011b`：首切使用 canonical `exceptions=none`（或等价明确名称），default/lock/BuildPlan 不再声称尚未实现的 `llvm-eh`；status-code/native-unwind 保留为后续独立 profile。
 4. `FE-010a`：新进程从磁盘 replay；`go list -deps` 闭包无 parser/checker/AST/tsoptions；events/HIR 有显式 primitive evaluation-order/single-block proof；compatibility/snapshot/options migration full regression 全绿。
 5. `IR-000a`：executor、specialization budget/fixed point、pre/post verifier hooks、independent effect proof、每步 dump/golden 与 validate-snapshot -> typed-HIR production prefix 通过全量 regression；后续 production handlers 与真正 MIR target/layout verifier留在 Phase 2A。
-6. `FND-004a`：最终 patch/SHA-256、doctor materialized-exact、官方 remote clean checkout full test/vet/cleanup 已通过；parent HEAD 仍需包含正确 gitlink、lock、patch、scripts，并从该 committed clean parent clone 重跑完整验收。
+6. `FND-004a`：当前最终 patch/SHA-256、doctor 与 remote clean checkout full test/vet 已通过；使 parent HEAD 包含正确 gitlink、lock、patch、scripts，并从该 committed clean parent clone 重跑完整验收。
 
 ## 7.1 Primitive vertical slice gate
 
 Phase 1.5 通过后，首条可运行链按以下顺序闭合：
 
-7. `IR-001a..005a/007a`：只实现 number/void TsType/RepType、参数读取、加法、单 block return 的 HIR/MIR builder/lowering 和真正 verifier；拒绝无返回 CFG、非法 store/phi、sparse/duplicate IDs，并验证首切适用的 RepType/layout/effect/capability。bool/string/null/undefined、调用和 general CFG 留在 Phase 2B。
-8. `RT-002a`、`BE-001/002a/004a`：只构建首切 empty runtime/startup 和 number-add LLVM lowering，完成 Linux x86-64 real LLVM、object 和 LLD 链接；完整 runtime registry、CFG/call/global backend 不能反向阻塞本纵切。
-9. `REL-001a`、`VERT-001`、`REL-002a`：用最小 case runner 执行 snapshot/HIR/MIR/LLVM/object/output provenance 纵切，并与 Node `add` oracle 差分；完整 `REL-001` release runner 不作为 Phase 2A 的前置。
+7. `(IR-007a -> IR-001a -> IR-002a -> IR-003a) || BE-001a || RT-002a`：前者只实现 target-independent number/void TsType/RepType、参数读取、加法、单 block return 的 HIR contract；BE/RT 分别建立 TargetMachine/DataLayout 与 empty runtime/startup scaffold。bool/string/null/undefined、调用和 general CFG 留在 Phase 2B。
+8. `BE-001a + RT-002a + BuildPlan -> TC-001a -> IR-004a/005a`：resolver 产出 immutable TargetContext、authoritative DataLayout 和 AvailableCapabilityCatalog；后续 MIR verifier 计算 BoundCapabilityClosure，完整 runtime registry、CFG/call/global backend 不能反向阻塞本纵切。
+9. `RT-002b`、`BE-002a/004a`、`REL-001a`、`VERT-001`、`REL-002a`：固定 C ABI、real LLVM/object/LLD、最小 case runner 与 Node `add` oracle 差分；完整 `REL-001` release runner 不作为 Phase 2A 的前置。
 
 更细的 diagnostic DTO（stage/span/profile/multiplicity/capability）和 artifact/oracle execution 在 `REL-001` 闭合；更广泛的 fuzz/并发矩阵继续作为 `REL-003` 门禁，不属于 Phase 1.5 入口条件。
 
@@ -234,22 +234,24 @@ typescript-go checker
 
 ### 10.2 BuildPlan 的准确边界
 
-`BuildPlan` 现在明确是绑定 `FrontendSnapshot` hash 的 canonical unresolved backend request。`ResolveBuildPlan` 只做 defaults、canonicalization、枚举/哈希完整性和 frontend binding；它不证明 host toolchain、LLVM data layout、runtime archive、GC/EH capability 或 target 可执行。Phase 2A 的硬边界改为：
+`BuildPlan` 现在明确是绑定 `FrontendSnapshot` hash 的 canonical unresolved backend request。`ResolveBuildPlan(FrontendSnapshot, buildConfig)` 只做 defaults、canonicalization、枚举/哈希完整性和 frontend binding；它不证明 host toolchain、LLVM data layout、runtime archive、GC/EH capability 或 target 可执行。source subset gate 只消费 snapshot，并将未实现的 BigInt/RegExp lowerer 报为 target-independent `subset.lowerer_unavailable`；所选 runtime 缺 capability 属于 resolver 之后的诊断。Phase 2A 的硬边界改为：
 
 ```text
 BuildPlan
-  -> ResolveTargetContext(toolchain manifest, runtime manifest)
-  -> TargetContext + DataLayout + CapabilitySet
+  -> ResolveTargetContext(toolchain manifest, runtime manifest, LLVM TargetMachine)
+  -> immutable TargetContext + authoritative DataLayout
+     + AvailableCapabilityCatalog
   -> RepresentationPlan
-  -> MIR verifier
+  -> target-aware MIR -> structural MIR verifier
+  -> BindRuntimeCapabilities -> BoundCapabilityClosure + frozen effects
   -> LLVM/object/link
 ```
 
-任何表示规划、MIR、LLVM 或链接代码都不得直接消费未解析的 `BuildPlan`。`TC-001a` 只接受显式 Linux x86-64、LLVM 20、generic CPU、锁定 runtime 和 no-EH 组合；空 target、interop/unsafe、ARC/arena、bounds-off、未知 runtime/feature 均应稳定返回 `unavailable`。这保留了 frontend 的 target independence，同时不把通用请求 schema 误标成可执行能力。
+任何表示规划、MIR、LLVM 或链接代码都不得直接消费未解析的 `BuildPlan`。`TC-001a` 只接受显式 Linux x86-64、LLVM 20、generic CPU、锁定 runtime 和 no-EH 组合；空 target、interop/unsafe、ARC/arena、bounds-off、未知 runtime/feature 均应稳定返回 `unavailable`。LLVM `TargetMachine` 查询的 DataLayout 是唯一权威值；toolchain manifest 只锁定 expected layout/hash，ABI layout manifest 只交叉校验且 mismatch 时 fail closed。`AvailableCapabilityCatalog` 只表示 manifest 的可用目录，实际程序闭包必须在 structural MIR 后生成 `BoundCapabilityClosure`。TC-001a 必须引入保存 canonical bytes/digest 的 typed resolver envelope；当前 pass state 的 `[]string` facts 只表达顺序，不能作为 target/capability proof。IR-004a 的 RepresentationPlan join pre-verifier 再核对 HIR FrontendSnapshotHash、BuildPlan.FrontendHash 和 resolver hashes。Link 接受相同 immutable TargetContext/hash，只复验 manifests/artifacts，不重新 ResolveTargetContext。这保留了 frontend 的 target independence，同时不把通用请求 schema 误标成可执行能力。
 
 ### 10.3 退出证据
 
-当前工作树已通过：
+此前工作树已通过（历史证据，旧 patch hash 已失效）：
 
 ```text
 go test ./internal/frontendwire ./internal/tsfrontend ./internal/ast2bingo ./internal/bingo ./cmd/ts2bin ./cmd/ts2bin-replay -count=1
@@ -259,12 +261,12 @@ go vet ./...
 go test ./... -count=1
 ```
 
-全仓本轮 Windows watcher 也通过；没有项目级测试失败。最终 patch SHA-256 为 `759e0661a91c7b757a78106425618046dc0b8e348f2c1e31263f486c074a9c9f`；`doctor -Quiet` 为 materialized-exact，官方 remote shallow clean checkout 严格 apply 后 full test/vet/cleanup 通过，WSL Go-LLVM verifier 与 Rust staticlib/LLD smoke 通过。`FND-004a` 只剩把正确 gitlink/lock/patch/scripts 纳入获授权 parent commit，并从该 parent HEAD clean clone 重跑；当前不能在未授权提交的情况下伪造这项证据。
+二次审计后的核心六包、frontend 九阶段（含 race/shuffle/repeat）、全仓 `go test ./...`/`go vet ./...`、doctor materialized-exact 与 official remote isolated patch apply/full test/vet/cleanup 已通过。当前 patch SHA-256 为 `cc4c9ab435810a23d31a1c1c72b040ae9241fbbadf1c041c6815df7266339e95`。旧 hash 仅作历史记录；剩余证据是从包含当前 gitlink/lock/patch/scripts 的 parent HEAD clean clone 重跑完整验收。
 
 ### 10.4 调整后的 Phase 2A 顺序
 
-1. `IR-007a` 先冻结 `number=f64`、NaN、`-0`、`+` 和 C ABI IEEE-754 bit observation。
+1. `IR-007a -> IR-001a -> IR-002a -> IR-003a` 冻结并验证 target-independent number/void HIR contract。
 2. `BE-001a`（Go-LLVM/TargetMachine/DataLayout）与 `RT-002a`（Rust workspace/empty startup scaffold）并行。
-3. `TC-001a` 绑定 toolchain/runtime manifests，产出 TargetContext；其失败必须先于 representation/MIR。
-4. `IR-001a..005a` 只实现 number/void、参数读取、加法、单 block return 与真正 MIR verifier；`RT-002b` 固定 `extern "C" double add(double,double)` harness，`BE-002a/004a` 完成 real LLVM/object/LLD。
+3. `BE-001a + RT-002a + BuildPlan -> TC-001a` 用 typed resolver envelope 绑定 toolchain/runtime manifests，产出 immutable TargetContext、authoritative DataLayout 和 AvailableCapabilityCatalog；其失败必须先于 representation/MIR。
+4. `IR-003a + TC-001a -> IR-004a/005a` 先在 RepresentationPlan join 核对 HIR/BuildPlan/context provenance，再实现 target-aware number/void MIR 与 structural/final verifier；`RT-002b` 固定 `extern "C" double add(double,double)` harness，`BE-002a/004a` 完成 real LLVM/object/LLD。
 5. `REL-001a -> VERT-001 -> REL-002a` 形成 snapshot-only 到 process/Node oracle 的首条可观察纵切；通过前不扩展 bool、调用、general CFG、对象、GC、EH、async 或第二目标。

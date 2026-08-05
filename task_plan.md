@@ -126,23 +126,23 @@
 
 ## Phase 1.5 与调整后主链（2026-08-05）
 
-`IR-007a` 先冻结 JavaScript `number=f64`、NaN/-0/`+` 和 C ABI bit-observation contract；`IR-001a` 的 number-only 实现只在 Phase 1.5 前置项关闭后启动。完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 Phase 2A real-LLVM 纵切反馈。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request，Phase 2A 必须先经 `ResolveTargetContext` 绑定 toolchain/runtime manifests、DataLayout 和 CapabilitySet，MIR/backend 不得直接消费它。
+`IR-007a -> IR-001a -> IR-002a -> IR-003a`、`BE-001a` 和 `RT-002a` 按各自依赖并行推进；`BE-001a + RT-002a + BuildPlan -> TC-001a` 后才进入 target-aware `IR-004a/005a`。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request；resolver 产出 immutable `TargetContext`、LLVM TargetMachine 的权威 `DataLayout` 和 `AvailableCapabilityCatalog`，structural MIR 之后再由 capability binding 产出 `BoundCapabilityClosure`。完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 Phase 2A real-LLVM 纵切反馈，MIR/backend 不得直接消费未解析 BuildPlan。
 
 | ID | 当前状态 | 结果/退出条件 |
 | --- | --- | --- |
 | Direction audit | complete | 保留总体架构；结论 `conditional pass / parent delivery pending`；阻断证据和调整后的依赖已写入审计报告/backlog |
 | CLI/profile fix | complete | 未显式 override 时保留完整 `bingoOptions`；显式 `--profile` 只改变 profile；定向测试通过 |
 | Assertion proof bridge | complete | assertion chain、non-null、representation/flow proof 已进入 snapshot，并由 wire 独立重算、corruption negative 和 round-trip regression 闭合 |
-| `FND-004` | implemented / acceptance-blocked | 最终 patch/hash 已生成，`doctor -Quiet` 恢复 materialized-exact，官方 remote shallow clean checkout apply 后全仓 test/vet 与 cleanup 通过；只剩把正确 gitlink/lock/patch/scripts 纳入获授权的 parent commit，才能严格证明 parent HEAD clean clone |
+| `FND-004` | implemented / acceptance-blocked | 当前 patch 已重生成，doctor materialized-exact，official remote isolated full test/vet/cleanup 通过；只剩当前 parent HEAD clean clone 的全量证明 |
 | `FE-008` | complete | Kind-driven payload/role/arity registry、单一 `frontendwire` serialized validator、rooted-path fail-closed 门禁与原 overlay 负例已实现；核心、race、shuffle/repeat、全仓 regression 通过 |
 | `FE-009` | complete | per-specifier binding、callee effect closure、exhaustive registry、lowerer facts、ownership/redirect 负例和 wire round-trip 已实现；serialized validator 双写已移除，核心与全仓 regression 通过 |
 | `FE-010` | complete | checker-free dependency closure、独立进程重复输出、显式 evaluation-order/single-block HIR 与 tamper post-verifier 已通过；migration baseline/golden regression 已闭合 |
 | `FE-011` | complete | source-level target split、三项 TS options、Windows/WSL identity、跨盘/UNC/POSIX rooted path fail-closed、profile/cache regression 和 validated FrontendSnapshot binding 已通过 |
 | `FE-011b` | complete | canonical `exceptions=none` 已迁移 default options、lock、BuildPlan 与 golden；`llvm-eh` 只保留为未来 capability 并 fail closed，status-code/native-unwind 后续独立锁定 |
 | `IR-000` | complete | executor/fixed-point/budget/pre-post/effect/dump golden 与 validate-snapshot -> typed-HIR production prefix 已通过核心、race、frontend stage 和全仓 regression；typed HIR 之后的 TargetContext/handlers 与真正 MIR verifier属于 Phase 2A |
-| Phase 2A: `IR-007a`, `IR-001a..005a`, `BE-001a`, `RT-002a`, `TC-001a`, `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | blocked | 先冻结 f64/NaN/-0/`+`，并行建立 Go-LLVM/TargetMachine 与 Rust startup scaffold；随后以 manifest 绑定 TargetContext，再实现 number/参数/加法/单 block return 的 HIR/MIR/verifier、固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential |
+| Phase 2A: `IR-007a`, `IR-001a..005a`, `BE-001a`, `RT-002a`, `TC-001a`, `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | blocked | 按 `IR-007a -> IR-001a -> IR-002a -> IR-003a`、`BE-001a`、`RT-002a` 并行；`BE-001a + RT-002a + BuildPlan -> TC-001a` 后再实现 target-aware number/参数/加法/单 block return HIR/MIR/verifier、固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential |
 | Phase 2B: primitive control flow | blocked | Phase 2A 通过后再扩 bool、变量、调用、CFG、string/null/undefined 和单次求值消糖 |
 | `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |
 | Broad Phase 2+ | blocked | 第一真实纵切通过后再扩对象/runtime/modules/generics/EH/async/第二目标 |
 
-当前验证备注：`go list -deps ./cmd/ts2bin-replay` 已证明 production replay 不携带 parser/checker/AST；核心六包、`go test -race` 核心六包、`go vet ./...`、frontend 九阶段脚本（含 race/shuffle/repeat）和 `go test ./... -count=1` 均通过。前端 baseline/golden 的有意 UTF-8 DTO 变化已人工审查并由专门 round-trip 测试锁定；全仓 Windows watcher 本轮也通过。patch SHA-256 `759e0661a91c7b757a78106425618046dc0b8e348f2c1e31263f486c074a9c9f` 已通过 doctor、官方 remote clean checkout apply/full test/vet 和 WSL Go-LLVM/Rust+LLD smoke。唯一未关闭的是未获授权的 parent commit/HEAD clean-clone 证明；不要重复开发已存在的 registry/executor，也不要在该交付门前进入 Phase 2B。
+当前验证备注：`go list -deps ./cmd/ts2bin-replay` 已证明 production replay 不携带 parser/checker/AST；核心六包、race/vet、frontend 九阶段、全仓回归和 isolated patch verifier 均通过。二次审计新增了显式 resolver pass、typed-HIR provenance、manifest provenance envelope 计划以及 BigInt/RegExp source/runtime diagnostic 分层；当前 patch SHA-256 由 lock 固定。只剩 parent HEAD clean clone 的全量证明；不要重复开发已存在的 registry/executor，也不要在该交付门前进入 Phase 2B。

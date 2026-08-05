@@ -28,14 +28,19 @@
 
 ## 2. Subset Gate 决策算法
 
-每个 source file 在 snapshot 后、HIR 前执行四层扫描：
+每个 source file 在 snapshot 后、HIR 前执行 target-independent 扫描：
 
 ```text
-GateNode(node, context):
+RunSourceSubsetGate(snapshot):
   1. SyntaxGate: 该 SyntaxKind/组合在当前阶段有 handler 吗？
-  2. TypeGate: resolved/narrowed type 能规范化并选择表示吗？
+  2. TypeGate: resolved/narrowed source type 能规范化吗？
   3. SemanticGate: 求值顺序、动态行为、方差和断言是否可证明？
-  4. CapabilityGate: runtime/host/target 是否提供完整 ABI 闭包？
+  4. LowererGate: 所需 semantic facts 与 source lowerer 是否已实现？
+
+RunTargetCapabilityGate(hir, targetContext, availableCapabilityCatalog):
+  1. 检查 logical capability requirement 在所选 target/runtime 是否有实现。
+  2. 检查 profile、ABI signature 与 target constraints 是否兼容。
+  3. structural MIR 后由 BindRuntimeCapabilities 计算 BoundCapabilityClosure。
 ```
 
 结果只有：
@@ -50,20 +55,20 @@ DeferByFeatureGate(feature)
 Reject(diagnostic)
 ```
 
-`DeferByFeatureGate` 对用户仍是编译错误，只是诊断同时指出规划的 feature 名；它不能产生半成品 MIR。
+`AcceptWithRuntime(capability)` 在 source gate 只记录 logical requirement，不证明 runtime 可用。`DeferByFeatureGate` 对用户仍是编译错误，只是诊断同时指出规划的 feature 名；它不能产生半成品 MIR。
 
 ### 2.1 拒绝时机
 
 - parser/binder/checker 诊断优先，避免用 Bingo 错误遮盖无效 TS。
 - AST/snapshot 完整性错误在 facade 阶段停止。
-- unsupported/unsafe/type representability 在 subset gate 停止。
+- unsupported source syntax、缺 lowerer/semantic proof 与 source-level unsafe 在 subset gate 停止。
 - specialization/variance 依赖具体实例时可在 HIR pass 停止。
-- capability/target 依赖最终闭包时最迟在 capability binding 停止。
+- target/runtime availability 在 `ResolveTargetContext` 后的 target capability gate 停止；实际 ABI 闭包问题最迟在 capability binding 停止。
 - MIR/LLVM verifier 失败属于编译器缺陷，不归类为用户“不支持语法”。
 
 ### 2.2 不可达代码
 
-subset gate 默认审计所有会进入 emit 的声明和表达式，包括控制流上不可达代码。只有经过显式、确定且在 artifact 中记录的 compile-time elimination 后，完全不进入 HIR 的分支才可不要求 runtime capability。不能根据 LLVM 优化可能删掉某段代码来接受 unsafe/unsupported 行为。
+subset gate 默认审计所有会进入 emit 的声明和表达式，包括控制流上不可达代码。只有经过显式、确定且在 artifact 中记录的 compile-time elimination 后，完全不进入 HIR 的分支才可不记录 logical runtime requirement。不能根据 LLVM 优化可能删掉某段代码来接受 unsafe/unsupported 行为；requirement 的可用性在 TargetContext 后验证。
 
 `.d.ts`、type-only import、interface/type alias 等真正 compile-only 节点走 `AcceptErase`，但其 value declaration 或外部调用仍须 capability。
 

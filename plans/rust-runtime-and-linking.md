@@ -233,9 +233,10 @@ umbrella archive 按函数/数据 section 构建，最终链接启用 ELF `--gc-
 ## 9. 最终链接算法
 
 ```text
-Link(req, verifiedMIR, appObjects):
-  1. Resolve TargetContext and object format.
-  2. Compute transitive runtime capability closure from bound MIR intrinsics.
+Link(targetContext, targetContextHash, verifiedMIR, appObjects):
+  1. Accept the already resolved immutable TargetContext and hash; revalidate
+     target/toolchain/runtime manifests, but do not resolve or select a target again.
+  2. Compute (or verify) the transitive BoundCapabilityClosure from bound MIR intrinsics.
   3. Select exactly one umbrella runtime whose target/profile/features/ABI hashes match.
   4. Compare capability signatures, layout manifest and exception/GC profiles.
   5. Add startup object, app/stdlib objects and that one umbrella staticlib.
@@ -265,15 +266,16 @@ Rust runtime 最低门禁：
 
 ## 11. 实施顺序
 
-1. 完成 `VERT-001`：为 `x86_64-unknown-linux-gnu` 构建空 startup 与空 `libbingo_runtime.a`，把真实 go-llvm 生成的 `add(number, number)` object 经 LLD 链接并运行；此步不依赖 GC/EH。
-2. 建立 `bingo-abi` schema、内部 `rlib` workspace、唯一 umbrella `staticlib` 和 deterministic response file。
-3. 实现 status/panic boundary、TargetContext 对应 umbrella 选择、artifact note/hash 与 profile 混链拒绝。
-4. 实现 allocator、ObjectHeader、descriptor、single-mutator shadow-stack root、最小 tracing GC 和 String，并通过 O0/O2 forced-collection root tests。
-5. 实现 dense Array、closure/runtime handle、Error，并完成第一条有分配和 callback 的纵切。
-6. 加入 self-hosted stdlib package，先实现 String/Array/Math 的小型能力闭包。
-7. 加入 Map/Set、iterator、Promise/microtask 和 resource crate；语言异常继续使用 status-code。
-8. Linux/Windows bridge contract 通过后再构建独立 native-unwind umbrella profile。
-9. 分别接入 BigInt、RegExp、Intl/Temporal 和 dynamic/host adapter；每项使用独立 capability，外部 engine archive 由 manifest 选择。
-10. core 稳定后收敛到 `no_std + alloc`，再评估第二 mutator、并发 GC、statepoint 或跨语言 LTO。
+1. 建立 `bingo-abi` schema、内部 `rlib` workspace、唯一 umbrella `staticlib` 和 deterministic response file；同时由 `BE-001a` 建立 LLVM TargetMachine/DataLayout 基座。
+2. 由 `RT-002a` 建立 empty startup 与 manifest scaffold，再由 `TC-001a` 绑定 TargetContext、DataLayout 和 AvailableCapabilityCatalog。
+3. 完成 `VERT-001` 所需的 number-only object/link path：把真实 go-llvm 生成的 `add(number, number)` object 经 LLD 链接并运行；此步不依赖 GC/EH。
+4. 实现 status/panic boundary、TargetContext 对应 umbrella 选择、artifact note/hash 与 profile 混链拒绝。
+5. 实现 allocator、ObjectHeader、descriptor、single-mutator shadow-stack root、最小 tracing GC 和 String，并通过 O0/O2 forced-collection root tests。
+6. 实现 dense Array、closure/runtime handle、Error，并完成第一条有分配和 callback 的纵切。
+7. 加入 self-hosted stdlib package，先实现 String/Array/Math 的小型能力闭包。
+8. 加入 Map/Set、iterator、Promise/microtask 和 resource crate；语言异常继续使用 status-code。
+9. Linux/Windows bridge contract 通过后再构建独立 native-unwind umbrella profile。
+10. 分别接入 BigInt、RegExp、Intl/Temporal 和 dynamic/host adapter；每项使用独立 capability，外部 engine archive 由 manifest 选择。
+11. core 稳定后收敛到 `no_std + alloc`，再评估第二 mutator、并发 GC、statepoint 或跨语言 LTO。
 
 一个 runtime 功能只有同时具备 safe/unsafe 契约、ABI schema、capability、target umbrella archive、失败策略、GC/effect 标记、链接闭包和 conformance 测试，才算可由 static profile 调用。
