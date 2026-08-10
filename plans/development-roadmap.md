@@ -94,7 +94,7 @@
 5. `[complete] IR-003a + TC-001a -> IR-004a/005a` 已用 RepresentationPlan join 核对 HIR/BuildPlan/context/compiler identity provenance，并完成 target-aware HIR -> MIR、structural verifier 与 `BoundCapabilityClosure`/exact effects；首切覆盖 non-empty available catalog 与 empty add bound closure 的分层测试。
 6. `[complete] IR-008a` 为 canonical pass executor 增加显式 case manifest、verified first-slice HIR/MIR canonical JSON/text serialization、schema-aware diff 与 `emit-hir --verify` / `emit-mir --verify` CLI；不适用阶段仍由 verifier 证明为 no-op，未引入语法面扩张。
 7. `[complete] RT-002b + BE-002a/004a` 已固定 `extern "C" double add(double,double)` 的 ABI/bit harness，把 final verified MIR 真实降为通过 verifier 的 LLVM/ELF object，并由确定性 LLD response file 链接运行；完整 IR/runtime/backend issue 的 Phase 2B 范围不作为首切前置。
-8. `[complete] REL-001a + VERT-001` 已由 `test --stage static-core` 执行完整 snapshot-to-process 真实产物并生成 canonical provenance report；下一步由 `REL-002a` 与 Node oracle 差分。
+8. `[complete] REL-001a + VERT-001 + REL-002a` 已由 `test --stage static-core` 执行完整 snapshot-to-process 真实产物、生成 canonical provenance report，并以锁定 Node 22.22.0 对普通值、`-0` 和 canonical qNaN 完成三方 binary64 差分。Phase 2A 退出，下一步进入 Phase 2B。
 
 ### 首批必须可运行样例
 
@@ -109,7 +109,7 @@ export function add(a: number, b: number): number { return a + b; }
 - backend 必须拒绝未经 `ResolveTargetContext` 的 BuildPlan；TargetContext、toolchain/runtime manifest hash、DataLayout 和 capability closure 必须进入 MIR/artifact provenance。
 - first-slice harness 通过固定 C ABI 传递 `double`，以 IEEE-754 bit pattern 观测 NaN、`-0` 和普通结果，避免当前 TS 子集缺少 literal/call 入口而无法形成可观察闭环。
 - case manifest 记录 source/snapshot/HIR/MIR/LLVM/object/executable/output 的 provenance；同一输入重复运行摘要稳定。
-- 任何对象、字符串、GC、EH、async、模块或广泛控制流工作都不能代替上述闭环；链路未闭合时 Phase 2A 不退出。
+- 上述闭环已经关闭。对象、GC、EH、async、模块与 self-hosted stdlib 仍不得借 Phase 2A 首切越过后续阶段门禁；Phase 2B 只扩本节定义的 primitive 控制流与静态核心。
 
 ## 阶段 2B：primitive 控制流与静态核心扩展
 

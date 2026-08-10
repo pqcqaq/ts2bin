@@ -319,3 +319,10 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - canonical static-core report 绑定 CompilerBuildIdentity、snapshot/HIR/BuildPlan/runtime/MIR/LLVM/object/emission/response/map/executable/link/output 全部 digest；篡改输出或顺序会被独立 verifier 拒绝。
 - `ts2bin test --stage static-core` 固定运行 checked-in case，不提供 runner/path override；WSL LLVM 20 下 `-0 + -0` 与 `1 + 2` 真实 executable 输出通过，Windows/no-LLVM 保持 fail closed。
 - 下一项仅为 `REL-002a` Node oracle differential；通过后 Phase 2A 才退出并进入 Phase 2B。
+
+## 2026-08-10 REL-002a 与 Phase 2A 完成
+
+- 新增锁定 Node 22.22.0 的 first-slice oracle；binary64 bits 通过 DataView 显式转换，oracle script/version/output hashes 进入 canonical report schema 2。
+- checked-in case 增加 canonical qNaN，与原有普通值、`-0` 一起执行 expected/native executable/Node 三方比较；冷启动总 case timeout 调整为 10 秒，仍受 60 秒 manifest 上限约束。
+- 使用 fork commit `a77f97525c6a262e8c4dbb8c86fffd989d566c08` 构建真实 LLVM 20 CLI 后，`ts2bin test --stage static-core --json` 返回 `ok=true`，三个 execution 全部一致；真实 ELF executable SHA-256 为 `7fad9cb1bd23a3b8f9d797989c38ee96e0549a18bfa33c1e3257de633880a926`。
+- Phase 2A 退出，Phase 2B 进入 ready。这里证明的是受限 `add(number, number)` 可执行纵切，不是通用 TypeScript 程序编译能力；self-hosted stdlib 仍依赖 Phase 2B 的变量/调用/控制流，以及 Phase 4 的模块、泛型、集合与 stdlib package contract。

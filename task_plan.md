@@ -148,8 +148,8 @@
 | `TC-001a` | complete | resolver 只读取 BuildPlan/toolchain/runtime manifests；生产 handler 绑定真实 TargetMachine，输出 immutable TargetContext、authoritative DataLayout 与非空 AvailableCapabilityCatalog，并原样保留 opaque HIR sidecar |
 | `IR-004a/005a` | complete | RepresentationPlan 已首次 join HIR/BuildPlan/TargetContext provenance；target-aware 单 block f64 MIR、structural/final verifier 与显式空 add BoundCapabilityClosure 已由 LLVM 20 end-to-end pass pipeline 验证 |
 | `IR-008a` | complete | 为已验证 first-slice HIR/MIR 提供 canonical JSON/text emit、schema-aware diff、显式 case manifest 与 verify CLI；Linux LLVM 20 与 Windows fail-closed 验收通过 |
-| `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | ready | 按依赖顺序完成固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential |
-| Phase 2B: primitive control flow | blocked | Phase 2A 通过后再扩 bool、变量、调用、CFG、string/null/undefined 和单次求值消糖 |
+| `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | complete | 固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential 已通过真实 CLI 验收 |
+| Phase 2B: primitive control flow | ready | 开始扩 bool、变量、调用、CFG、string/null/undefined 和单次求值消糖 |
 | `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |
 | Broad Phase 2+ | blocked | 第一真实纵切通过后再扩对象/runtime/modules/generics/EH/async/第二目标 |
 
