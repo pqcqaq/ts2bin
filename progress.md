@@ -311,3 +311,11 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - harness 启动时调用 `bingo_rt_abi_version_v1()`，保证 umbrella archive 不会被 LLD 当作未使用输入丢弃；link map 必须证明唯一 archive token 与 runtime ABI symbol。
 - WSL LLVM 20 下两次相同输入的 response/map/executable/content hash 完全一致，真实 executable 对 `1 + 2` 输出 `4008000000000000`；Windows contract tests、targeted test/vet 与 LLVM 五包回归通过。
 - 下一顺序为 `REL-001a -> VERT-001 -> REL-002a`。
+
+## 2026-08-10 REL-001a 与 VERT-001 完成
+
+- first-slice case manifest 新增严格 `timeoutMs` 与 canonical binary64 execution vectors；空执行、重复名称、非 16 位或大写 hex 均 fail closed。
+- 新增 `internal/firstslicerunner`：在单 case timeout 内执行 snapshot-only HIR、target-aware MIR、real LLVM/object、strict runtime/LLD link 和 process run，并按名称稳定排序 executions。
+- canonical static-core report 绑定 CompilerBuildIdentity、snapshot/HIR/BuildPlan/runtime/MIR/LLVM/object/emission/response/map/executable/link/output 全部 digest；篡改输出或顺序会被独立 verifier 拒绝。
+- `ts2bin test --stage static-core` 固定运行 checked-in case，不提供 runner/path override；WSL LLVM 20 下 `-0 + -0` 与 `1 + 2` 真实 executable 输出通过，Windows/no-LLVM 保持 fail closed。
+- 下一项仅为 `REL-002a` Node oracle differential；通过后 Phase 2A 才退出并进入 Phase 2B。

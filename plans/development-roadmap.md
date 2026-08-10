@@ -94,7 +94,7 @@
 5. `[complete] IR-003a + TC-001a -> IR-004a/005a` 已用 RepresentationPlan join 核对 HIR/BuildPlan/context/compiler identity provenance，并完成 target-aware HIR -> MIR、structural verifier 与 `BoundCapabilityClosure`/exact effects；首切覆盖 non-empty available catalog 与 empty add bound closure 的分层测试。
 6. `[complete] IR-008a` 为 canonical pass executor 增加显式 case manifest、verified first-slice HIR/MIR canonical JSON/text serialization、schema-aware diff 与 `emit-hir --verify` / `emit-mir --verify` CLI；不适用阶段仍由 verifier 证明为 no-op，未引入语法面扩张。
 7. `[complete] RT-002b + BE-002a/004a` 已固定 `extern "C" double add(double,double)` 的 ABI/bit harness，把 final verified MIR 真实降为通过 verifier 的 LLVM/ELF object，并由确定性 LLD response file 链接运行；完整 IR/runtime/backend issue 的 Phase 2B 范围不作为首切前置。
-8. 先实现最小 `REL-001a` case-runner core，再由 `VERT-001` 执行完整 snapshot-to-process 真实产物，并由 `REL-002a` 与 Node oracle 差分。
+8. `[complete] REL-001a + VERT-001` 已由 `test --stage static-core` 执行完整 snapshot-to-process 真实产物并生成 canonical provenance report；下一步由 `REL-002a` 与 Node oracle 差分。
 
 ### 首批必须可运行样例
 

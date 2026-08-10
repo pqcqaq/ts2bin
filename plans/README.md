@@ -60,7 +60,7 @@ TypeScript source
 - 普通 TypeScript 对象允许循环引用，general static profile 默认使用非移动 tracing GC；ARC/arena 只能作为有额外可证明约束的受限 profile。
 - `Array<T>` 的可变元素默认不变，`ReadonlyArray<T>` 和只读字段才允许协变；tsgo 的历史兼容性结果不能直接当作 Bingo 布局安全证明。
 - `typescript-go` 的现行交付来自 `pqcqaq/typescript-go` 的固定 fork commit；lock 同时记录 reviewed Microsoft upstream ancestor，更新通过显式 upstream merge 与完整 compatibility gate。旧 patch/materialize/apply 机制已经退役，仅可作为标明已废弃的历史证据出现。
-- Phase 1.5 已形成 schema v2、wire 单一 validator、Kind shape/semantic-proof registry、带 provenance 的 target-independent `FrontendSnapshot`、canonical unresolved `BuildPlan`、checker-free replay，以及执行到 typed HIR 的 canonical production pass 前缀。`FE-012a`、`IR-007a/001a/002a/003a/004a/005a/008a`、`BE-001a/002a/004a`、`RT-002a/002b` 与 `TC-001a` 已关闭：LLVM 20 TargetMachine/DataLayout、strict resolver、target-aware f64 MIR、固定 C ABI bit harness、真实 LLVM verifier/object emission、确定性 LLD response/map/executable identity 与 link/run smoke 均已有真实证据。下一项是 first-slice runner；在 number-only 可执行纵切通过前，Phase 2B 和广泛语法保持 blocked。
+- Phase 1.5 已形成 schema v2、wire 单一 validator、Kind shape/semantic-proof registry、带 provenance 的 target-independent `FrontendSnapshot`、canonical unresolved `BuildPlan`、checker-free replay，以及执行到 typed HIR 的 canonical production pass 前缀。`FE-012a`、`IR-007a/001a/002a/003a/004a/005a/008a`、`BE-001a/002a/004a`、`RT-002a/002b`、`TC-001a`、`REL-001a` 与 `VERT-001` 已关闭：严格 case manifest/timeout、真实 LLVM/object/LLD、runtime ABI map proof、可执行 bit harness 和完整 artifact provenance report 均已有真实证据。下一项是 Node oracle differential；在 `REL-002a` 通过前，Phase 2B 和广泛语法保持 blocked。
 
 ## 交付物与唯一事实来源
 
