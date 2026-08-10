@@ -296,3 +296,10 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - `internal/irartifact` 新增 checker-free first-slice case manifest loader、严格 HIR/MIR decode、canonical JSON/text rendering 和 schema/provenance-first structural diff；`emit-hir --verify` 与 `emit-mir --verify` 接入 `ts2bin`。
 - `testdata/ts2bin/lowering` 固定 `add(number, number)` 的 serialized frontend snapshot、BuildPlan 与 runtime manifest。HIR replay 只读取 snapshot；MIR 才读取已验证 BuildPlan/runtime manifest 和真实 LLVM TargetMachine。
 - Windows/no-LLVM 默认构建对 `emit-mir` 明确 fail closed；WSL LLVM 20 下 `emit-mir --verify` 与 bound MIR equal diff 通过。IR-008a 完成后下一顺序为 `RT-002b + BE-002a -> BE-004a -> REL-001a -> VERT-001 -> REL-002a`。
+
+## 2026-08-10 RT-002b 与 BE-002a 完成
+
+- runtime ABI schema 新增程序导出 `extern "C" double add(double,double)`；生成 C header、严格 16 位 IEEE-754 hex harness 与 `bingo_add_harness.o`，并把 harness 文件、大小和 SHA-256 纳入 strict runtime manifest。
+- final verified bound MIR 真实降为 LLVM `double @add(double,double)`、`fadd` 与 `nounwind`，明确禁用 fast-math；LLVM VerifyModule、ELF object emission、artifact tamper rejection 和重复 emission identity 均通过。
+- runtime source/ABI/target/manifest hashes 已同步 resolver fixture 与父仓库 lock；Windows 全仓 `go test -p=1 ./... -count=1`、`go vet ./...`、WSL LLVM 20 定向测试、Rust `cargo test --lib` 和重复 release build 通过。默认 Rust doctest 因当前 WSL 找不到 `rustdoc` 未执行，保留为环境项。
+- 下一顺序为 `BE-004a -> REL-001a -> VERT-001 -> REL-002a`；`VERT-001` 仍是第一个完整 snapshot-to-process Linux 可执行文件门槛。

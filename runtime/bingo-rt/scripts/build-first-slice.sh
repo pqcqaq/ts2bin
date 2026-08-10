@@ -11,12 +11,14 @@ cargo build --manifest-path "$ROOT/Cargo.toml" --workspace --release --locked --
 
 ARCHIVE="$TARGET/cargo/$TRIPLE/release/libbingo_runtime.a"
 STARTUP="$TARGET/bingo_startup_empty.o"
+HARNESS="$TARGET/bingo_add_harness.o"
 MANIFEST="$TARGET/runtime-manifest.json"
 SMOKE="$TARGET/runtime-link-smoke"
 
 "$CLANG" -target "$TRIPLE" -I"$ROOT/include" -c "$ROOT/startup/empty.c" -o "$STARTUP"
-python3 "$ROOT/tools/write_runtime_manifest.py" --archive "$ARCHIVE" --startup "$STARTUP" --output "$MANIFEST"
+"$CLANG" -target "$TRIPLE" -I"$ROOT/include" -c "$ROOT/harness/add_bits.c" -o "$HARNESS"
+python3 "$ROOT/tools/write_runtime_manifest.py" --archive "$ARCHIVE" --startup "$STARTUP" --harness "$HARNESS" --output "$MANIFEST"
 "$CLANG" -target "$TRIPLE" -I"$ROOT/include" "$ROOT/tests/link_smoke.c" "$STARTUP" "$ARCHIVE" -ldl -lpthread -lm -o "$SMOKE"
 "$SMOKE"
 
-printf 'umbrella=%s\nstartup=%s\nmanifest=%s\nsmoke=%s\n' "$ARCHIVE" "$STARTUP" "$MANIFEST" "$SMOKE"
+printf 'umbrella=%s\nstartup=%s\nharness=%s\nmanifest=%s\nsmoke=%s\n' "$ARCHIVE" "$STARTUP" "$HARNESS" "$MANIFEST" "$SMOKE"

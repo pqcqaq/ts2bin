@@ -96,7 +96,7 @@ function GetRuntimeSourceHash([string]$Path) {
     foreach ($Name in @("Cargo.toml", "Cargo.lock", "rust-toolchain.toml")) {
         $Files.Add((Get-Item -LiteralPath (Join-Path $Path $Name)))
     }
-    foreach ($Directory in @("crates", "schema", "startup", "include", "tools", "tests", "manifests")) {
+    foreach ($Directory in @("crates", "schema", "startup", "harness", "include", "tools", "tests", "manifests")) {
         foreach ($File in Get-ChildItem -LiteralPath (Join-Path $Path $Directory) -File -Recurse) {
             if ($File.FullName -notmatch '[\\/]__pycache__[\\/]' -and $File.Extension -notin @(".pyc", ".pyo")) {
                 $Files.Add($File)

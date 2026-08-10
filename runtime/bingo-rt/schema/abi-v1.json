@@ -5,13 +5,24 @@
     {
       "name": "bingo_rt_abi_version_v1",
       "returnType": "u32",
+      "parameters": [],
       "implementation": "runtime",
       "worker": "abi_version"
     },
     {
       "name": "bingo_startup_empty_v1",
       "returnType": "void",
+      "parameters": [],
       "implementation": "startup"
+    },
+    {
+      "name": "add",
+      "returnType": "f64",
+      "parameters": [
+        {"name": "left", "type": "f64"},
+        {"name": "right", "type": "f64"}
+      ],
+      "implementation": "program"
     }
   ]
 }

@@ -269,7 +269,7 @@ print(
 )
 
 files = [runtime_root / name for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml")]
-for directory in ("crates", "schema", "startup", "include", "tools", "tests", "manifests"):
+for directory in ("crates", "schema", "startup", "harness", "include", "tools", "tests", "manifests"):
     files.extend(
         path
         for path in (runtime_root / directory).rglob("*")

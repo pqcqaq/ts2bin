@@ -22,7 +22,7 @@ def source_hash():
     roots = [ROOT / "Cargo.toml", ROOT / "Cargo.lock", ROOT / "rust-toolchain.toml"]
     roots.extend(
         path
-        for directory in ("crates", "schema", "startup", "include", "tools", "tests", "manifests")
+        for directory in ("crates", "schema", "startup", "harness", "include", "tools", "tests", "manifests")
         for path in (ROOT / directory).rglob("*")
         if path.is_file() and "__pycache__" not in path.parts and path.suffix not in {".pyc", ".pyo"}
     )
@@ -48,6 +48,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--startup", type=Path, required=True)
+    parser.add_argument("--harness", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args()
     target_manifest_path = ROOT / "manifests" / "first-slice-target.json"
@@ -56,18 +57,26 @@ def main():
         manifest = json.load(stream)
     expected_archive = manifest.pop("umbrellaArchive")
     expected_startup = manifest.pop("startupObject")
-    if arguments.archive.name != expected_archive or arguments.startup.name != expected_startup:
+    expected_harness = manifest.pop("harnessObject")
+    if (
+        arguments.archive.name != expected_archive
+        or arguments.startup.name != expected_startup
+        or arguments.harness.name != expected_harness
+    ):
         raise SystemExit(
-            f"artifact names do not match target manifest: archive={arguments.archive.name}, startup={arguments.startup.name}"
+            "artifact names do not match target manifest: "
+            f"archive={arguments.archive.name}, startup={arguments.startup.name}, harness={arguments.harness.name}"
         )
     archive_hash = sha256_file(arguments.archive)
     startup_hash = sha256_file(arguments.startup)
+    harness_hash = sha256_file(arguments.harness)
     for capability in manifest["capabilities"]:
         capability["signatureHash"] = canonical_hash(capability["signature"])
         capability["implementationHash"] = archive_hash
     manifest["artifacts"] = {
         "umbrellaArchive": {"file": arguments.archive.name, "sha256": archive_hash, "bytes": arguments.archive.stat().st_size},
         "startupObject": {"file": arguments.startup.name, "sha256": startup_hash, "bytes": arguments.startup.stat().st_size},
+        "harnessObject": {"file": arguments.harness.name, "sha256": harness_hash, "bytes": arguments.harness.stat().st_size},
     }
     manifest["abiSchemaHash"] = sha256_file(abi_schema_path)
     manifest["targetManifestHash"] = sha256_file(target_manifest_path)
