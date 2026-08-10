@@ -355,3 +355,10 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - `choose-boolean-number` 独立 case 显式绑定 entry point 和 boolean flag；linker 从已验证 LLVM entry point 选择 manifest-authenticated harness，true/false 两支与锁定 Node 22.22.0 oracle 一致。
 - strict ABI negative 会以 `0x02` 调用真实 ELF；LLVM 入口 trap 使进程失败且无输出，arguments/output hash 和全部 snapshot/HIR/MIR/LLVM/object/link/executable hashes 进入 canonical report。
 - Windows 串行全仓 `go test -p=1 ./... -count=1`、全仓 `go vet -p=1 ./...`、WSL LLVM 20 choose pipeline/runner、Rust workspace lib tests 和双 runtime build manifest identity 通过；WSL 缺少 `rustfmt`/`rustdoc`，format/doctest 未执行，保持为环境项。下一纵切为 local binding/assignment + direct call。
+
+## 2026-08-11 Phase 2B IR-001c/002c/003c + BE-002c + REL-002c + VERT-003 完成
+
+- HIR schema/primitive lowering 升为 v3；source-type plan 支持按源码位置排序的 1-2 个函数和唯一 exported entry。`calllocal` snapshot proof 接入 direct call 的 selected signature/effect proof；同模块 direct-call capture 允许只读函数 binding，其余 capture 仍 fail closed。
+- HIR verifier 支持多函数 dense `FunctionID`、唯一 exported function、call 的 callee/参数/返回类型/effect 校验；local binding/assignment 以 SSA value alias 更新，不引入未证明内存 place。MIR 同步保留 `Callee`/visibility，helper 必须是较早函数且禁止递归。
+- LLVM 20 生成 internal-linkage `add` helper 和 exported `compute`；runtime 新增并认证 `bingo_compute_harness.o`。runner/Node oracle 对 NaN、负零和普通值三组输入执行真实 ELF，全部与 Node 22.22.0 一致；runtime manifest/content hash 已同步到 lock 和 fixtures。
+- 定向 Go packages 与 WSL LLVM 20 `ts2bin test --stage static-core --case testdata/ts2bin/calllocal --json` 通过。下一纵切为 loop/general CFG + SSA/phi。

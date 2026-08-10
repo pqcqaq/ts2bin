@@ -142,14 +142,14 @@
 | `IR-000` | complete | executor/fixed-point/budget/pre-post/effect/dump golden 与 validate-snapshot -> typed-HIR production prefix 已通过核心、race、frontend stage 和全仓 regression；typed HIR 之后的 TargetContext/handlers 与真正 MIR verifier属于 Phase 2A |
 | `FE-012a` | complete | `Frontend.Build` 返回 canonical 深拷贝 sealed snapshot；返回 diagnostics 与 snapshot 脱离；公共 subset gate 自行完整验证，production replay 对 in-memory/serialized/frontend-wrapper 的重哈希 flags/modifiers/type-closure 篡改全部 fail closed |
 | `IR-007a` | complete | number contract v1 固定 binary64、canonical qNaN、保留 `-0`、RNE/no-fast-math `+`、`extern "C" double add(double,double)` 与 ABI bits observation；alternative contract fail closed |
-| `IR-001a/002a/003a` | complete | HIR major 2、完整 `CompilerBuildIdentity`、identity-free source plan、logical requirements、number-only canonical lowering 与 schema/ID/type/effect/origin/terminator/provenance/capability/CFG negative tests已闭合；lock 的 `bingoIR` 已升为 2 |
+| `IR-001a/002a/003a` | complete | Phase 2A 的 HIR major 2、完整 `CompilerBuildIdentity`、identity-free source plan、logical requirements、number-only canonical lowering 与 negative tests 已闭合；Phase 2B 多函数/direct-call contract 后当前 HIR/lock major 为 3 |
 | Typed artifact envelope substrate | complete | `PassArtifactEnvelope` 已提供 role/schema/payload-bound canonical digest、immutability 与 executor transition checks；resolver 不把 HIR误列为语义输入，RepresentationPlan 才声明首次 join；这只是 `TC-001a` 基础设施 |
 | `BE-001a`, `RT-002a` | complete | Go-LLVM 20.1.8 TargetMachine/DataLayout 与 deterministic ELF object emission 已闭合；Rust 1.97.1 workspace、ABI schema、empty startup、唯一 umbrella staticlib、runtime manifest 与重复构建 byte identity 已闭合 |
 | `TC-001a` | complete | resolver 只读取 BuildPlan/toolchain/runtime manifests；生产 handler 绑定真实 TargetMachine，输出 immutable TargetContext、authoritative DataLayout 与非空 AvailableCapabilityCatalog，并原样保留 opaque HIR sidecar |
 | `IR-004a/005a` | complete | RepresentationPlan 已首次 join HIR/BuildPlan/TargetContext provenance；target-aware 单 block f64 MIR、structural/final verifier 与显式空 add BoundCapabilityClosure 已由 LLVM 20 end-to-end pass pipeline 验证 |
 | `IR-008a` | complete | 为已验证 first-slice HIR/MIR 提供 canonical JSON/text emit、schema-aware diff、显式 case manifest 与 verify CLI；Linux LLVM 20 与 Windows fail-closed 验收通过 |
 | `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | complete | 固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential 已通过真实 CLI 验收 |
-| Phase 2B: primitive control flow | in progress | `IR-007b` 到 `RT-002c + REL-001b/002b + VERT-002` 已关闭：`choose(flag, left, right)` 完成 snapshot/HIR/MIR/LLVM/object/harness/process/Node 全链，并拒绝非 canonical boolean byte；下一步扩 local binding/assignment 与 direct call，再做 loop、string/null/undefined 和单次求值消糖 |
+| Phase 2B: primitive control flow | in progress | `IR-007b` 到 `VERT-002` 及 `IR-001c/002c/003c + BE-002c + REL-002c + VERT-003` 已关闭：`choose` 与 `calllocal` 均完成 snapshot/HIR/MIR/LLVM/object/harness/process/Node 全链；下一步做 loop/general CFG + SSA/phi，再做 string/null/undefined 和单次求值消糖 |
 | `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |
 | Broad Phase 2+ | blocked | 第一真实纵切通过后再扩对象/runtime/modules/generics/EH/async/第二目标 |
 

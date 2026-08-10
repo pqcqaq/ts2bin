@@ -344,4 +344,4 @@ MIR: HIR provenance + BuildPlan digest + TargetContext hash
 
 HIR canonical hash 必须覆盖全部 provenance；缺失、未知 schema major 或格式错误均由 verifier 拒绝。`RepresentationPlan` join pre-verifier 必须验证 HIR 的 `FrontendSnapshotHash` 与 `BuildPlan.FrontendHash` 相同，并验证 resolver output 与 BuildPlan 请求一致；replay/post-verifier 也必须交叉核对来源 plan，不能只在篡改后重新计算 HIR hash。MIR 构造把 available catalog 与后续 bound closure 分别哈希。
 
-reader 只保证读取同一 major IR version。mandatory provenance 在 pre-release v1 期间变化后已由 `IR-001a` 协调更新 `HIRSchemaVersion`、replay、lock 的 `bingoIR` 和旧 major 拒绝测试；当前 reader 只接受 HIR v2。缓存命中必须比较全部 digest；不能只比较源文件时间戳。
+reader 只保证读取同一 major IR version。mandatory provenance 在 pre-release v1 期间变化后已由 `IR-001a` 协调更新 `HIRSchemaVersion`、replay、lock 的 `bingoIR` 和旧 major 拒绝测试；Phase 2B 多函数/direct-call contract 将当前 reader 升为 HIR v3。缓存命中必须比较全部 digest；不能只比较源文件时间戳。

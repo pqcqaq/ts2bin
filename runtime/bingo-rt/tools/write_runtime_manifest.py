@@ -49,6 +49,7 @@ def main():
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--startup", type=Path, required=True)
     parser.add_argument("--harness", type=Path, required=True)
+    parser.add_argument("--compute-harness", type=Path, required=True)
     parser.add_argument("--choose-harness", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args()
@@ -59,21 +60,24 @@ def main():
     expected_archive = manifest.pop("umbrellaArchive")
     expected_startup = manifest.pop("startupObject")
     expected_harness = manifest.pop("harnessObject")
+    expected_compute_harness = manifest.pop("computeHarnessObject")
     expected_choose_harness = manifest.pop("chooseHarnessObject")
     if (
         arguments.archive.name != expected_archive
         or arguments.startup.name != expected_startup
         or arguments.harness.name != expected_harness
+        or arguments.compute_harness.name != expected_compute_harness
         or arguments.choose_harness.name != expected_choose_harness
     ):
         raise SystemExit(
             "artifact names do not match target manifest: "
             f"archive={arguments.archive.name}, startup={arguments.startup.name}, "
-            f"harness={arguments.harness.name}, chooseHarness={arguments.choose_harness.name}"
+            f"harness={arguments.harness.name}, computeHarness={arguments.compute_harness.name}, chooseHarness={arguments.choose_harness.name}"
         )
     archive_hash = sha256_file(arguments.archive)
     startup_hash = sha256_file(arguments.startup)
     harness_hash = sha256_file(arguments.harness)
+    compute_harness_hash = sha256_file(arguments.compute_harness)
     choose_harness_hash = sha256_file(arguments.choose_harness)
     for capability in manifest["capabilities"]:
         capability["signatureHash"] = canonical_hash(capability["signature"])
@@ -82,6 +86,7 @@ def main():
         "umbrellaArchive": {"file": arguments.archive.name, "sha256": archive_hash, "bytes": arguments.archive.stat().st_size},
         "startupObject": {"file": arguments.startup.name, "sha256": startup_hash, "bytes": arguments.startup.stat().st_size},
         "harnessObject": {"file": arguments.harness.name, "sha256": harness_hash, "bytes": arguments.harness.stat().st_size},
+        "computeHarnessObject": {"file": arguments.compute_harness.name, "sha256": compute_harness_hash, "bytes": arguments.compute_harness.stat().st_size},
         "chooseHarnessObject": {"file": arguments.choose_harness.name, "sha256": choose_harness_hash, "bytes": arguments.choose_harness.stat().st_size},
     }
     manifest["abiSchemaHash"] = sha256_file(abi_schema_path)
