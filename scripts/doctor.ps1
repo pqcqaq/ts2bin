@@ -72,6 +72,40 @@ function GetCanonicalTreeHash([string]$Path) {
     } finally { $Hash.Dispose() }
 }
 
+function GetCanonicalFileSetHash([string]$BasePath, [System.IO.FileInfo[]]$Files) {
+    $Resolved = (Resolve-Path -LiteralPath $BasePath).Path
+    $SortedFiles = @($Files | Sort-Object {
+        [IO.Path]::GetRelativePath($Resolved, $_.FullName).Replace('\', '/')
+    })
+    $Hash = [Security.Cryptography.IncrementalHash]::CreateHash([Security.Cryptography.HashAlgorithmName]::SHA256)
+    $Utf8 = [Text.UTF8Encoding]::new($false)
+    try {
+        foreach ($File in $SortedFiles) {
+            $Relative = [IO.Path]::GetRelativePath($Resolved, $File.FullName).Replace('\', '/')
+            $Hash.AppendData($Utf8.GetBytes($Relative))
+            $Hash.AppendData([byte[]](0))
+            $Hash.AppendData([IO.File]::ReadAllBytes($File.FullName))
+            $Hash.AppendData([byte[]](0))
+        }
+        return [Convert]::ToHexString($Hash.GetHashAndReset()).ToLowerInvariant()
+    } finally { $Hash.Dispose() }
+}
+
+function GetRuntimeSourceHash([string]$Path) {
+    $Files = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
+    foreach ($Name in @("Cargo.toml", "Cargo.lock", "rust-toolchain.toml")) {
+        $Files.Add((Get-Item -LiteralPath (Join-Path $Path $Name)))
+    }
+    foreach ($Directory in @("crates", "schema", "startup", "include", "tools", "tests", "manifests")) {
+        foreach ($File in Get-ChildItem -LiteralPath (Join-Path $Path $Directory) -File -Recurse) {
+            if ($File.FullName -notmatch '[\\/]__pycache__[\\/]' -and $File.Extension -notin @(".pyc", ".pyo")) {
+                $Files.Add($File)
+            }
+        }
+    }
+    return GetCanonicalFileSetHash $Path $Files.ToArray()
+}
+
 if (-not $Quiet) { Write-Host "ts2bin toolchain doctor" -ForegroundColor Cyan; Write-Host "root: $Root" }
 Report "lock schema" ($Lock.schemaVersion -eq 2 -and $Lock.lockFormat -eq "ts2bin.lock.v2") ("schema={0}; format={1}" -f $Lock.schemaVersion, $Lock.lockFormat)
 CheckVersion "Go" "go" @("version") ("go" + $Lock.toolchains.go)
@@ -186,6 +220,11 @@ $ReplayBuildOk = (
 )
 Report "replay build target" $ReplayBuildOk ("goos={0}; goarch={1}; goamd64={2}; cgo={3}; goenv={4}; gotoolchain={5}" -f [string]$ReplayBuild.goos, [string]$ReplayBuild.goarch, [string]$ReplayBuild.goamd64, [string]$ReplayBuild.cgoEnabled, [string]$ReplayBuild.goenv, [string]$ReplayBuild.gotoolchain)
 
+$GoModText = Get-Content -LiteralPath (Join-Path $Root "typescript-go\go.mod") -Raw -ErrorAction SilentlyContinue
+$GoLLVMVersion = $null
+if ($GoModText -match '(?m)^\s*tinygo\.org/x/go-llvm\s+(\S+)\s*$') { $GoLLVMVersion = $Matches[1] }
+Report "go-llvm module" ($GoLLVMVersion -eq [string]$Lock.toolchains.goLLVM) ("source={0}; lock={1}" -f ($GoLLVMVersion ?? "missing"), [string]$Lock.toolchains.goLLVM)
+
 try {
     $Stdlib = GetCanonicalTreeHash (Join-Path $Root "typescript-go\internal\bundled\libs")
     $StdlibOk = (
@@ -197,6 +236,33 @@ try {
     Report "bundled stdlib" $StdlibOk ("files={0}; bytes={1}; sha256={2}" -f $Stdlib.FileCount, $Stdlib.TotalBytes, $Stdlib.Sha256)
 } catch {
     Report "bundled stdlib" $false $_.Exception.Message
+}
+
+try {
+    $RuntimeLock = $Lock.runtime
+    $RuntimeMetadataOk = (
+        $null -ne $RuntimeLock -and
+        [string]$RuntimeLock.workspace -eq "runtime/bingo-rt" -and
+        [string]$RuntimeLock.sourceHashAlgorithm -eq "sha256-path-nul-content-nul-v1" -and
+        [string]$RuntimeLock.abiSchema -eq "schema/abi-v1.json" -and
+        [string]$RuntimeLock.targetManifest -eq "manifests/first-slice-target.json"
+    )
+    Report "runtime lock metadata" $RuntimeMetadataOk ("workspace={0}; algorithm={1}; abi={2}; target={3}" -f [string]$RuntimeLock.workspace, [string]$RuntimeLock.sourceHashAlgorithm, [string]$RuntimeLock.abiSchema, [string]$RuntimeLock.targetManifest)
+
+    $RuntimePath = Join-Path $Root ([string]$RuntimeLock.workspace)
+    $RuntimeSourceHash = GetRuntimeSourceHash $RuntimePath
+    Report "runtime source" ($RuntimeSourceHash -eq [string]$RuntimeLock.sourceSha256) ("sha256={0}" -f $RuntimeSourceHash)
+
+    $AbiSchemaHash = (Get-FileHash -LiteralPath (Join-Path $RuntimePath ([string]$RuntimeLock.abiSchema)) -Algorithm SHA256).Hash.ToLowerInvariant()
+    Report "runtime ABI schema" ($AbiSchemaHash -eq [string]$RuntimeLock.abiSchemaSha256) ("sha256={0}" -f $AbiSchemaHash)
+
+    $TargetManifestHash = (Get-FileHash -LiteralPath (Join-Path $RuntimePath ([string]$RuntimeLock.targetManifest)) -Algorithm SHA256).Hash.ToLowerInvariant()
+    Report "runtime target manifest" ($TargetManifestHash -eq [string]$RuntimeLock.targetManifestSha256) ("sha256={0}" -f $TargetManifestHash)
+
+    $CargoLockHash = (Get-FileHash -LiteralPath (Join-Path $RuntimePath "Cargo.lock") -Algorithm SHA256).Hash.ToLowerInvariant()
+    Report "runtime Cargo.lock" ($CargoLockHash -eq [string]$RuntimeLock.cargoLockSha256) ("sha256={0}" -f $CargoLockHash)
+} catch {
+    Report "runtime lock closure" $false $_.Exception.Message
 }
 
 $VsWhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"

@@ -238,6 +238,81 @@ while IFS=$'\t' read -r kind ok detail; do
   esac
 done <<<"$DETAILS"
 
+RUNTIME_DETAILS="$(python3 - "$ROOT" "$LOCK" <<'PY'
+import hashlib
+import json
+import pathlib
+import re
+import sys
+
+root = pathlib.Path(sys.argv[1])
+with pathlib.Path(sys.argv[2]).open(encoding="utf-8") as stream:
+    lock = json.load(stream)
+runtime = lock.get("runtime", {})
+workspace = runtime.get("workspace", "")
+runtime_root = root / workspace
+
+metadata_ok = (
+    workspace == "runtime/bingo-rt"
+    and runtime.get("sourceHashAlgorithm") == "sha256-path-nul-content-nul-v1"
+    and runtime.get("abiSchema") == "schema/abi-v1.json"
+    and runtime.get("targetManifest") == "manifests/first-slice-target.json"
+)
+print(
+    "RUNTIME_METADATA\t{}\tworkspace={}; algorithm={}; abi={}; target={}".format(
+        int(metadata_ok),
+        workspace or "missing",
+        runtime.get("sourceHashAlgorithm", "missing"),
+        runtime.get("abiSchema", "missing"),
+        runtime.get("targetManifest", "missing"),
+    )
+)
+
+files = [runtime_root / name for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml")]
+for directory in ("crates", "schema", "startup", "include", "tools", "tests", "manifests"):
+    files.extend(
+        path
+        for path in (runtime_root / directory).rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix not in {".pyc", ".pyo"}
+    )
+digest = hashlib.sha256()
+for path in sorted(set(files), key=lambda item: item.relative_to(runtime_root).as_posix()):
+    digest.update(path.relative_to(runtime_root).as_posix().encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(path.read_bytes())
+    digest.update(b"\0")
+observed = digest.hexdigest()
+print(f"RUNTIME_SOURCE\t{int(observed == runtime.get('sourceSha256'))}\tsha256={observed}")
+
+for kind, path_key, hash_key, fallback in (
+    ("RUNTIME_ABI", "abiSchema", "abiSchemaSha256", None),
+    ("RUNTIME_TARGET", "targetManifest", "targetManifestSha256", None),
+    ("RUNTIME_CARGO_LOCK", None, "cargoLockSha256", "Cargo.lock"),
+):
+    relative = fallback or runtime.get(path_key, "")
+    path = runtime_root / relative
+    observed = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else "missing"
+    print(f"{kind}\t{int(observed == runtime.get(hash_key))}\tsha256={observed}")
+
+go_mod = (root / "typescript-go/go.mod").read_text(encoding="utf-8")
+match = re.search(r"^\s*tinygo\.org/x/go-llvm\s+(\S+)\s*$", go_mod, re.MULTILINE)
+observed = match.group(1) if match else "missing"
+expected = lock.get("toolchains", {}).get("goLLVM")
+print(f"GO_LLVM\t{int(observed == expected)}\tsource={observed}; lock={expected or 'missing'}")
+PY
+)"
+
+while IFS=$'\t' read -r kind ok detail; do
+  case "$kind" in
+    RUNTIME_METADATA) report "runtime lock metadata" "$ok" "$detail" ;;
+    RUNTIME_SOURCE) report "runtime source" "$ok" "$detail" ;;
+    RUNTIME_ABI) report "runtime ABI schema" "$ok" "$detail" ;;
+    RUNTIME_TARGET) report "runtime target manifest" "$ok" "$detail" ;;
+    RUNTIME_CARGO_LOCK) report "runtime Cargo.lock" "$ok" "$detail" ;;
+    GO_LLVM) report "go-llvm module" "$ok" "$detail" ;;
+  esac
+done <<<"$RUNTIME_DETAILS"
+
 if [[ "${#FAILURES[@]}" -eq 0 ]]; then
   [[ "$QUIET" == 1 ]] || echo "All required Linux toolchain checks passed."
   exit 0

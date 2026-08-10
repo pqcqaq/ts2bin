@@ -436,7 +436,7 @@ x86_64-unknown-linux-gnu add(number, number)
 该纵切不依赖对象、GC、EH、self-hosted stdlib、async 或第二 target。实现顺序调整为：
 
 1. 完成 lowering-complete snapshot、snapshot-only HIR readiness 和本节 pass DAG 门禁。
-2. Phase 2A 的 validated-input hardening 与 target-independent number typed-HIR 契约（`FE-012a`、`IR-007a/001a/002a/003a`）已关闭。下一步并行完成 `BE-001a` LLVM TargetMachine/DataLayout 与 `RT-002a` empty runtime/manifest scaffold；两路输入齐备后实现带 typed multi-artifact envelope 的最小 `ResolveTargetContext`，再由 RepresentationPlan 首次 join verified HIR、BuildPlan 与 TargetContext，接入单 block MIR、structural/final verifier 和真实后端，最后完成 `VERT-001`。
+2. Phase 2A 的 validated-input hardening、target-independent number typed-HIR 契约（`FE-012a`、`IR-007a/001a/002a/003a`）、`BE-001a` LLVM TargetMachine/DataLayout 与 `RT-002a` empty runtime/manifest scaffold 已关闭。当前实现带 typed multi-artifact envelope 的最小 `TC-001a ResolveTargetContext`，再由 RepresentationPlan 首次 join verified HIR、BuildPlan 与 TargetContext，接入单 block MIR、structural/final verifier 和真实后端，最后完成 `VERT-001`。
 3. 在 Phase 2B 实现 local、direct call、branch/general CFG/SSA、loop、union narrowing、nullish、optional/logical 和 patterns。
 4. 冻结 `ObjectView`、object/class/closure layout 与 variance adapter，再引入 single-mutator GC v1。
 5. 实现 modules、generics、array/map/set/iterator 和 self-hosted stdlib。

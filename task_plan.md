@@ -126,11 +126,11 @@
 
 ## Phase 1.5 与调整后主链（2026-08-06）
 
-`FE-012a` 与 `IR-007a -> IR-001a -> IR-002a -> IR-003a` 已关闭；下一步并行推进 `BE-001a` 和 `RT-002a`，二者与 BuildPlan 汇合到 `TC-001a` 后才进入 target-aware `IR-004a/005a`。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request；resolver 只语义消费 BuildPlan/toolchain/runtime manifests，产出 immutable `TargetContext`、LLVM TargetMachine 的权威 `DataLayout` 和 `AvailableCapabilityCatalog`。typed envelope 原样保留 HIR，首次 HIR/target provenance join 发生在 `RepresentationPlan`；structural MIR 之后再由 capability binding 产出 `BoundCapabilityClosure`。完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 real-LLVM 纵切反馈，MIR/backend 不得直接消费未解析 BuildPlan。
+`FE-012a`、`IR-007a -> IR-001a -> IR-002a -> IR-003a`、`BE-001a` 与 `RT-002a` 已关闭；当前只推进 `TC-001a`，完成 BuildPlan、LLVM toolchain manifest 与 Rust runtime manifest 的真实解析后，才进入 target-aware `IR-004a/005a`。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request；resolver 只语义消费 BuildPlan/toolchain/runtime manifests，产出 immutable `TargetContext`、LLVM TargetMachine 的权威 `DataLayout` 和 `AvailableCapabilityCatalog`。typed envelope 原样保留 HIR，首次 HIR/target provenance join 发生在 `RepresentationPlan`；structural MIR 之后再由 capability binding 产出 `BoundCapabilityClosure`。完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 real-LLVM 纵切反馈，MIR/backend 不得直接消费未解析 BuildPlan。
 
 | ID | 当前状态 | 结果/退出条件 |
 | --- | --- | --- |
-| Direction audit | complete | 保留总体架构；Phase 1.5 实现契约已完成、Phase 2A 可启动；当前 pinned-fork 交付迁移已落盘但 FND-004 验收待执行，阻断证据和调整后的依赖已写入审计报告/backlog |
+| Direction audit | complete | 保留总体架构；Phase 1.5 与 pinned-fork 交付验收均已完成，Phase 2A 按真实产物纵切推进；阻断证据和调整后的依赖已写入审计报告/backlog |
 | CLI/profile fix | complete | 未显式 override 时保留完整 `bingoOptions`；显式 `--profile` 只改变 profile；定向测试通过 |
 | Assertion proof bridge | complete | assertion chain、non-null、representation/flow proof 已进入 snapshot，并由 wire 独立重算、corruption negative 和 round-trip regression 闭合 |
 | `FND-004` | complete | 现行 submodule/lock 已迁移到 `pqcqaq/typescript-go` 的固定 fork commit，并以 reviewed upstream ancestor + fork commit 作为 compiler identity；旧 patch/materialize/apply 机制已退役。本地 doctor、frontend 九阶段、隔离 fork smoke/full test/vet、locked replay 双构建、远端 fork fetch/full test/vet，以及 committed parent HEAD clean-clone 的 identity/clean-worktree/doctor 验收均已通过 |
@@ -144,8 +144,9 @@
 | `IR-007a` | complete | number contract v1 固定 binary64、canonical qNaN、保留 `-0`、RNE/no-fast-math `+`、`extern "C" double add(double,double)` 与 ABI bits observation；alternative contract fail closed |
 | `IR-001a/002a/003a` | complete | HIR major 2、完整 `CompilerBuildIdentity`、identity-free source plan、logical requirements、number-only canonical lowering 与 schema/ID/type/effect/origin/terminator/provenance/capability/CFG negative tests已闭合；lock 的 `bingoIR` 已升为 2 |
 | Typed artifact envelope substrate | complete | `PassArtifactEnvelope` 已提供 role/schema/payload-bound canonical digest、immutability 与 executor transition checks；resolver 不把 HIR误列为语义输入，RepresentationPlan 才声明首次 join；这只是 `TC-001a` 基础设施 |
-| `BE-001a`, `RT-002a` | ready | 并行建立真实 Go-LLVM TargetMachine/DataLayout 与 Rust empty startup/toolchain-runtime manifests；不得以 fixture envelope 冒充完成 |
-| `TC-001a`, `IR-004a/005a` | blocked | 等待 `BE-001a + RT-002a` 的真实 manifests/DataLayout；随后实现 resolver、RepresentationPlan join、target-aware MIR provenance/verifier 与 BoundCapabilityClosure |
+| `BE-001a`, `RT-002a` | complete | Go-LLVM 20.1.8 TargetMachine/DataLayout 与 deterministic ELF object emission 已闭合；Rust 1.97.1 workspace、ABI schema、empty startup、唯一 umbrella staticlib、runtime manifest 与重复构建 byte identity 已闭合 |
+| `TC-001a` | ready | 真实 toolchain/runtime manifests 与 unresolved BuildPlan 已齐备；下一步只实现 resolver 输出 immutable TargetContext、authoritative DataLayout 与 AvailableCapabilityCatalog |
+| `IR-004a/005a` | blocked | 等待 `TC-001a`；随后由 RepresentationPlan 首次 join HIR/target provenance，再实现 target-aware MIR verifier 与 BoundCapabilityClosure |
 | `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | blocked | 等待 verified target-aware MIR，再完成固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential |
 | Phase 2B: primitive control flow | blocked | Phase 2A 通过后再扩 bool、变量、调用、CFG、string/null/undefined 和单次求值消糖 |
 | `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |

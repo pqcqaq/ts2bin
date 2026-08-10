@@ -1,2 +1,3 @@
 patches/typescript-go/*.patch binary
 *.sh text eol=lf
+runtime/bingo-rt/** text eol=lf
