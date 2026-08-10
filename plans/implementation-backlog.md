@@ -169,6 +169,8 @@ Phase 2B 继续按可执行纵切关闭，不能一次性把完整 `IR-001..008`
 
 `IR-006a + BE-002e + RT-002e + REL-002e + VERT-006` 的 local nullable coalesce-assignment 纵切已完成：真实 snapshot 固定 `value ??= fallback; return value`，HIR/MIR 复用 guarded nullable CFG 并记录 logical-assignment test/store 事件，LLVM/LLD/ELF 与独立 Node `??=` oracle 差分通过，rehashed return binding、malformed predicate/unwrap/phi、manifest/oracle substitution 和非法 ABI tag 均 fail closed。该子任务只证明局部变量 SSA writeback；完整 `IR-006` 的 property/computed-key/getter/call 单次求值证据依赖 Phase 3 `OBJ-000/001/003/006`，不得由本纵切提前关闭。
 
+`IR-001f/002f/003f + IR-004f/005f + BE-002f + RT-002f + REL-002f + VERT-007` 的 `classify(value: number): number` 纵切已完成：HIR v6/MIR v4 冻结 lowercase binary64 literal bits、prefix unary `-` 和五块连续 if/多返回 CFG；MIR verifier 拒绝常量、`fneg`、比较或返回路径篡改；LLVM 20 使用 ordered `<`，保留 NaN 条件为 false 与 `-0` 分类为 `+0`；一参数 C ABI harness、real LLVM/LLD/ELF 和 Node differential 覆盖负数、`-0`、小数、`1` 与 qNaN。下一条语义工作继续是 UTF-16 string representation/runtime；完整 property optional chain 仍属于 Phase 3 object/place contract。
+
 阶段退出命令目标：
 
 ```text

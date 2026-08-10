@@ -35,6 +35,14 @@
       "implementation": "program"
     },
     {
+      "name": "classify",
+      "returnType": "f64",
+      "parameters": [
+        {"name": "value", "type": "f64"}
+      ],
+      "implementation": "program"
+    },
+    {
       "name": "coalesce",
       "returnType": "f64",
       "parameters": [

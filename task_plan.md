@@ -149,7 +149,7 @@
 | `IR-004a/005a` | complete | RepresentationPlan 已首次 join HIR/BuildPlan/TargetContext provenance；target-aware 单 block f64 MIR、structural/final verifier 与显式空 add BoundCapabilityClosure 已由 LLVM 20 end-to-end pass pipeline 验证 |
 | `IR-008a` | complete | 为已验证 first-slice HIR/MIR 提供 canonical JSON/text emit、schema-aware diff、显式 case manifest 与 verify CLI；Linux LLVM 20 与 Windows fail-closed 验收通过 |
 | `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | complete | 固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential 已通过真实 CLI 验收 |
-| Phase 2B: primitive control flow | in progress | `choose`、`calllocal` 与 `loop` 均完成 snapshot/HIR/MIR/LLVM/object/harness/process/Node 全链；loop 已关闭 general CFG、edge-aware SSA/phi 和 back edge。下一步做 string/null/undefined representation 与 ABI，再做单次求值消糖；Phase 2B 尚未整体完成 |
+| Phase 2B: primitive control flow | in progress | `choose`、`classify`、`calllocal`、`loop`、`coalesce` 与 local `coalesceAssign` 均完成 snapshot/HIR/MIR/LLVM/object/harness/process/Node 全链；已覆盖 literal/`fneg`、连续 if/多返回、general CFG、edge-aware SSA/phi、nullable ABI 和局部 `??=`。下一步做 UTF-16 string representation/runtime；Phase 2B 尚未整体完成 |
 | `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |
 | Broad Phase 2+ | blocked | 第一真实纵切通过后再扩对象/runtime/modules/generics/EH/async/第二目标 |
 

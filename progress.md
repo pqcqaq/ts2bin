@@ -376,3 +376,10 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - ABI 固定为 16-byte `{i8 tag, [7 x i8] padding, f64 payload}`：tag `0/1/2` 分别表示 number/null/undefined；nullish payload 必须为零，未知 tag 在 LLVM ABI 入口 trap。HIR/MIR verifier 和 case manifest 都拒绝未证明 unwrap、非 canonical tag/payload。
 - runtime manifest、C harness、LLVM 20、LLD、Linux ELF、Node 22 对拍均已通过；执行覆盖普通 number、`-0`、NaN、null、undefined 以及非法 tag `03`。
 - Phase 2B 仍为 in progress。下一项是 optional/nullish/logical assignment 的单次求值消糖；string ownership/GC 和模块、完整 stdlib 仍在后续阶段。编译器主体是 Go，不把受限程序可执行误称为 compiler self-bootstrap。
+
+## 2026-08-11 Phase 2B numeric literal/classify VERT-007 完成
+
+- fork commit `89ca9be2cabfdbbc32c70c46e7cdc68c418fe34e` 将 HIR 升为 v6、Phase 2B target-aware MIR 升为 v4；`number.constant` 以 lowercase 16-digit binary64 bits 保存，prefix unary `-` 明确降为 `fneg`，无关操作携带 number bits 会被拒绝。
+- `classify(value: number): number` 从真实 validated snapshot 生成两个有序 `<`、五块 CFG 和三条 return；source/HIR/MIR 复核覆盖 literal constant/type、负号 operator、condition binding、successor 和 return value tamper。
+- runtime ABI 增加 `double classify(double)` 与一参数 bit harness，所有 runtime manifests 认证新对象；WSL LLVM 20/LLD 真实 ELF 对负数、`-0`、小数、`1` 与 canonical qNaN 均和 Node 22.22.0 一致。
+- Windows 定向 replay/HIR/MIR/link/runner/target tests 与 WSL LLVM 20 backend/MIR/link/runner tests 通过。Phase 2B 仍为 in progress；下一纵切为 UTF-16 string representation/runtime，完整 property optional chain 继续依赖 Phase 3 object/place contract。

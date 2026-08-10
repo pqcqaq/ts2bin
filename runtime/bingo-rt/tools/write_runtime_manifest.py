@@ -51,6 +51,7 @@ def main():
     parser.add_argument("--harness", type=Path, required=True)
     parser.add_argument("--compute-harness", type=Path, required=True)
     parser.add_argument("--choose-harness", type=Path, required=True)
+    parser.add_argument("--classify-harness", type=Path, required=True)
     parser.add_argument("--coalesce-harness", type=Path, required=True)
     parser.add_argument("--coalesce-assign-harness", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -64,6 +65,7 @@ def main():
     expected_harness = manifest.pop("harnessObject")
     expected_compute_harness = manifest.pop("computeHarnessObject")
     expected_choose_harness = manifest.pop("chooseHarnessObject")
+    expected_classify_harness = manifest.pop("classifyHarnessObject")
     expected_coalesce_harness = manifest.pop("coalesceHarnessObject")
     expected_coalesce_assign_harness = manifest.pop("coalesceAssignHarnessObject")
     if (
@@ -72,19 +74,21 @@ def main():
         or arguments.harness.name != expected_harness
         or arguments.compute_harness.name != expected_compute_harness
         or arguments.choose_harness.name != expected_choose_harness
+        or arguments.classify_harness.name != expected_classify_harness
         or arguments.coalesce_harness.name != expected_coalesce_harness
         or arguments.coalesce_assign_harness.name != expected_coalesce_assign_harness
     ):
         raise SystemExit(
             "artifact names do not match target manifest: "
             f"archive={arguments.archive.name}, startup={arguments.startup.name}, "
-            f"harness={arguments.harness.name}, computeHarness={arguments.compute_harness.name}, chooseHarness={arguments.choose_harness.name}, coalesceHarness={arguments.coalesce_harness.name}, coalesceAssignHarness={arguments.coalesce_assign_harness.name}"
+            f"harness={arguments.harness.name}, computeHarness={arguments.compute_harness.name}, chooseHarness={arguments.choose_harness.name}, classifyHarness={arguments.classify_harness.name}, coalesceHarness={arguments.coalesce_harness.name}, coalesceAssignHarness={arguments.coalesce_assign_harness.name}"
         )
     archive_hash = sha256_file(arguments.archive)
     startup_hash = sha256_file(arguments.startup)
     harness_hash = sha256_file(arguments.harness)
     compute_harness_hash = sha256_file(arguments.compute_harness)
     choose_harness_hash = sha256_file(arguments.choose_harness)
+    classify_harness_hash = sha256_file(arguments.classify_harness)
     coalesce_harness_hash = sha256_file(arguments.coalesce_harness)
     coalesce_assign_harness_hash = sha256_file(arguments.coalesce_assign_harness)
     for capability in manifest["capabilities"]:
@@ -96,6 +100,7 @@ def main():
         "harnessObject": {"file": arguments.harness.name, "sha256": harness_hash, "bytes": arguments.harness.stat().st_size},
         "computeHarnessObject": {"file": arguments.compute_harness.name, "sha256": compute_harness_hash, "bytes": arguments.compute_harness.stat().st_size},
         "chooseHarnessObject": {"file": arguments.choose_harness.name, "sha256": choose_harness_hash, "bytes": arguments.choose_harness.stat().st_size},
+        "classifyHarnessObject": {"file": arguments.classify_harness.name, "sha256": classify_harness_hash, "bytes": arguments.classify_harness.stat().st_size},
         "coalesceHarnessObject": {"file": arguments.coalesce_harness.name, "sha256": coalesce_harness_hash, "bytes": arguments.coalesce_harness.stat().st_size},
         "coalesceAssignHarnessObject": {"file": arguments.coalesce_assign_harness.name, "sha256": coalesce_assign_harness_hash, "bytes": arguments.coalesce_assign_harness.stat().st_size},
     }
