@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "runtime": "core-es2020",
+  "runtimeABIVersion": 1,
+  "target": {
+    "triple": "x86_64-unknown-linux-gnu",
+    "cpu": "generic",
+    "features": [],
+    "objectFormat": "elf"
+  },
+  "profile": "static",
+  "gc": "tracing",
+  "exceptions": "none",
+  "panic": "abort",
+  "umbrellaArchive": "libbingo_runtime.a",
+  "startupObject": "bingo_startup_empty.o",
+  "capabilities": [
+    {
+      "logicalName": "rt.abi.version",
+      "symbolName": "bingo_rt_abi_version_v1",
+      "abiVersion": "1.0.0",
+      "signature": "() -> u32",
+      "effects": [],
+      "requiredFeatures": []
+    }
+  ]
+}

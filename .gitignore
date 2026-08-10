@@ -21,6 +21,8 @@ runtime/**/target/
 .toolchains/
 .DS_Store
 Thumbs.db
+__pycache__/
+*.py[cod]
 
 # Editor and OS metadata
 .idea/

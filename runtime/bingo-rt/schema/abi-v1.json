@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "runtimeABIVersion": 1,
+  "functions": [
+    {
+      "name": "bingo_rt_abi_version_v1",
+      "returnType": "u32",
+      "implementation": "runtime",
+      "worker": "abi_version"
+    },
+    {
+      "name": "bingo_startup_empty_v1",
+      "returnType": "void",
+      "implementation": "startup"
+    }
+  ]
+}
