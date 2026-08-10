@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "lockFormat": "ts2bin.lock.v2",
   "typescriptGo": {
-    "commit": "db79bea025937896843049558fd3eb99e9dfd68c",
+    "commit": "7cd2d918f0318997c73ea542edec720849b08e0c",
     "upstreamCommit": "86cc4767d4ebadb9b7845d0ab8eb2b05785c3fee",
-    "forkCommit": "db79bea025937896843049558fd3eb99e9dfd68c",
+    "forkCommit": "7cd2d918f0318997c73ea542edec720849b08e0c",
     "forkRemote": "https://github.com/pqcqaq/typescript-go.git",
     "reproducibilityStatus": "pinned-fork-commit",
     "remote": "https://github.com/microsoft/typescript-go.git",
@@ -28,11 +28,11 @@
   "runtime": {
     "workspace": "runtime/bingo-rt",
     "sourceHashAlgorithm": "sha256-path-nul-content-nul-v1",
-    "sourceSha256": "91f289c0d4a0435db1a4147d5497026fe785475068d6641cb759687a66c96f1a",
+    "sourceSha256": "db229da631fc0d6c7aabe8470d69638f1f7efc672f9f6a4fa8e5321021f58bf9",
     "abiSchema": "schema/abi-v1.json",
-    "abiSchemaSha256": "e3f41e041c51b57f818e95148217bfdf40e5df597fe061fbbaba1d551a2d2ff8",
+    "abiSchemaSha256": "4bb4f2c0565ded7c96c01e33bf28f0aa64816a8715bb82237be2bed52b3c0c70",
     "targetManifest": "manifests/first-slice-target.json",
-    "targetManifestSha256": "494e7b5017488824e620d6867eef721028a5aaec750a9278587f2a1790f92929",
+    "targetManifestSha256": "1a592308475066a7b02fce7c7d59a08a6f59b3d1d97da62bf563b70a9d681838",
     "cargoLockSha256": "8165764c7c19e4654a2c2c74c61723af85d6178bc2b8fd001664ebd88efca4f8"
   },
   "toolchains": {

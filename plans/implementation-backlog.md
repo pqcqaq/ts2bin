@@ -165,7 +165,9 @@ Phase 2B 继续按可执行纵切关闭，不能一次性把完整 `IR-001..008`
 | `IR-001c/002c/003c + BE-002c + REL-002c + VERT-003` | `complete` | VERT-002 | `calllocal` 真实 snapshot 生成 internal `add` 与 exported `compute`；SSA local bind/assign、签名绑定 direct call、多函数 HIR/MIR verifier、internal-linkage LLVM helper、独立 compute harness、真实 ELF 与 Node 22.22.0 differential 通过。 |
 | `IR-001d/002d/003d/004d/005d + BE-002d + REL-002d + VERT-004` | `complete` | VERT-003 | `loop` 真实 snapshot 生成 `while`、`<`、header/body/exit CFG 与 loop-carried value；HIR v4/MIR v2 显式保存 incoming block，phi verifier 按入边验证定义支配并接受 back edge；LLVM 20 生成真实 phi、`fcmp olt`、back edge 和 exit，四组 binary64 输入与锁定 Node oracle 一致。 |
 
-下一条纵切固定为 string/nullish representation 与 ABI，随后实现 optional chain、nullish coalescing、logical assignment 的单次求值 lowering。它们必须继续使用 validated snapshot、现有 canonical pass DAG、Phase 2B HIR/MIR verifier、真实 LLVM runner 和 Node oracle；当前 loop 关闭不能被解释为完整 `IR-001..008` 或整个 Phase 2B 完成。
+`IR-001e/002e/003e + IR-004e/005e + RT-002d + REL-001c/002d + VERT-005` 的 nullable-number coalesce 纵切已完成：HIR v5/MIR v3 固定 16-byte nullable ABI、distinct null/undefined tags、guarded unwrap、runtime harness、真实 LLVM/LLD/ELF 和 Node differential，并有 source/HIR/MIR/case/ABI negative tests。下一条纵切是 optional chain、logical assignment 与单次求值 lowering；string ownership/GC 仍需独立 representation/runtime contract。当前 coalesce/loop 关闭不能被解释为完整 `IR-001..008` 或整个 Phase 2B 完成。
+
+`IR-006a + BE-002e + RT-002e + REL-002e + VERT-006` 的 local nullable coalesce-assignment 纵切已完成：真实 snapshot 固定 `value ??= fallback; return value`，HIR/MIR 复用 guarded nullable CFG 并记录 logical-assignment test/store 事件，LLVM/LLD/ELF 与独立 Node `??=` oracle 差分通过，rehashed return binding、malformed predicate/unwrap/phi、manifest/oracle substitution 和非法 ABI tag 均 fail closed。该子任务只证明局部变量 SSA writeback；完整 `IR-006` 的 property/computed-key/getter/call 单次求值证据依赖 Phase 3 `OBJ-000/001/003/006`，不得由本纵切提前关闭。
 
 阶段退出命令目标：
 

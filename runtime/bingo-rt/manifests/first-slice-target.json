@@ -18,6 +18,7 @@
   "computeHarnessObject": "bingo_compute_harness.o",
   "chooseHarnessObject": "bingo_choose_harness.o",
   "coalesceHarnessObject": "bingo_coalesce_harness.o",
+  "coalesceAssignHarnessObject": "bingo_coalesce_assign_harness.o",
   "capabilities": [
     {
       "logicalName": "rt.abi.version",

@@ -8,6 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef BINGO_COALESCE_ENTRYPOINT
+#define BINGO_COALESCE_ENTRYPOINT coalesce
+#endif
+
 static int parse_byte(const char *text, uint8_t *value) {
     if (strlen(text) != 2 || !isxdigit((unsigned char)text[0]) || !isxdigit((unsigned char)text[1])) return 0;
     char *end = NULL;
@@ -55,7 +59,7 @@ int main(int argc, char **argv) {
     BingoNullableNumber value = {0};
     value.tag = tag;
     if (tag == 0) value.payload = double_from_bits(value_bits);
-    double result = coalesce(value, double_from_bits(fallback_bits));
+    double result = BINGO_COALESCE_ENTRYPOINT(value, double_from_bits(fallback_bits));
     printf("%016" PRIx64 "\n", double_to_bits(result));
     return 0;
 }

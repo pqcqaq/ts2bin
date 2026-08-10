@@ -42,6 +42,15 @@
         {"name": "fallback", "type": "f64"}
       ],
       "implementation": "program"
+    },
+    {
+      "name": "coalesceAssign",
+      "returnType": "f64",
+      "parameters": [
+        {"name": "value", "type": "nullable_f64"},
+        {"name": "fallback", "type": "f64"}
+      ],
+      "implementation": "program"
     }
   ]
 }

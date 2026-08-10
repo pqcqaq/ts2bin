@@ -121,11 +121,11 @@ export function add(a: number, b: number): number { return a + b; }
 
 1. 实现 literal、identifier、unary/binary、call、variable、return、if/while/for/switch/conditional 的 HIR builder 与 CFG lowering。
 2. 将 flow narrowing、literal widening、`never`/unreachable 转成 HIR facts；不在 lowering 中重新猜测类型。
-3. `[in progress]` 固定 bool、null/undefined 与 UTF-16 string 的表示和 ABI，再实现对应 conversion/operator table。`IR-007b` 已冻结 boolean 的 canonical `i1` MIR 表示、C ABI `uint8_t` 0/1 边界、直接 condition branch 和禁止 number 隐式互转；null/undefined 与 UTF-16 string 仍待后续纵切。
+3. `[in progress]` 固定 bool、null/undefined 与 UTF-16 string 的表示和 ABI，再实现对应 conversion/operator table。`IR-007b` 已冻结 boolean 的 canonical `i1` MIR 表示、C ABI `uint8_t` 0/1 边界、直接 condition branch 和禁止 number 隐式互转；nullable-number coalesce 已冻结 distinct null/undefined tags、16-byte ABI 和 guarded unwrap，UTF-16 string 仍待后续 representation/runtime 纵切。
 4. 实现 `as`、`satisfies`、non-null、nullish/optional chain 和 logical assignment 的单次求值消糖。
 5. 扩展 HIR/MIR verifier 的 dominance、phi、短路、cleanup/effect 规则；实现保序常量折叠，不做跨函数激进优化。
 
-四条 Phase 2B 可执行纵切已关闭：`choose(flag, left, right)` 证明 boolean/number HIR、三块 CFG、i1/f64 MIR、严格 i8 ABI 与真实 LLVM conditional branch；`calllocal` 证明 SSA local bind/assign、签名绑定 direct call、多函数 HIR/MIR 与 internal-linkage LLVM helper；`loop` 证明 `while` source proof、`<` lowering、general CFG、显式 incoming edge、loop-carried phi 与 back edge；`coalesce(value: number | null | undefined, fallback: number)` 证明 nullable-number 16-byte ABI、`null`/`undefined` distinct tags、nullish payload canonicalization、guarded unwrap 与 phi。四者均由 deterministic ELF 独立进程执行并与锁定 Node oracle 差分，malformed source/HIR/MIR/CFG/phi/tag 在 LLVM 前或 ABI 入口 fail closed。下一纵切是 optional/nullish/logical assignment 的单次求值消糖；string ownership/GC、模块和完整 stdlib 仍在后续阶段，这不表示整个 Phase 2B 已完成。
+五条 Phase 2B 可执行纵切已关闭：`choose(flag, left, right)` 证明 boolean/number HIR、三块 CFG、i1/f64 MIR、严格 i8 ABI 与真实 LLVM conditional branch；`calllocal` 证明 SSA local bind/assign、签名绑定 direct call、多函数 HIR/MIR 与 internal-linkage LLVM helper；`loop` 证明 `while` source proof、`<` lowering、general CFG、显式 incoming edge、loop-carried phi 与 back edge；`coalesce(value: number | null | undefined, fallback: number)` 证明 nullable-number 16-byte ABI、`null`/`undefined` distinct tags、nullish payload canonicalization、guarded unwrap 与 phi；`coalesceAssign` 在同一 nullable contract 上证明局部变量 `??=` 的短路、SSA writeback 和返回绑定。五者均由 deterministic ELF 独立进程执行并与锁定 Node oracle 差分，malformed source/HIR/MIR/CFG/phi/tag 在 LLVM 前或 ABI 入口 fail closed。`coalesceAssign` 只关闭 local place，不关闭完整 `IR-006`：属性、computed key、getter 和 optional-chain 的单次求值仍依赖 Phase 3 的 `OBJ-000/001/003/006` object/place contract。string ownership/GC、模块和完整 stdlib 也仍在后续阶段，这不表示整个 Phase 2B 已完成。
 
 ### 验收门槛
 
