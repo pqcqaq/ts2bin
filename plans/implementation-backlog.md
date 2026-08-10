@@ -100,7 +100,7 @@ ts2bin test --stage frontend
 | `RT-002a` | `complete` | Rust 1.97.1 workspace、版本化 ABI schema、empty startup、唯一 umbrella staticlib 与 runtime manifest 已落盘；Cargo test/fmt/clippy、Clang/LLD smoke 和隔离重复构建 byte identity 通过。 |
 | `TC-001a` | `complete` | strict resolver 以真实 TargetMachine 交叉校验 BuildPlan/toolchain/runtime manifests，输出 immutable TargetContext、authoritative DataLayout 与非空 AvailableCapabilityCatalog；opaque HIR sidecar 原样保留，tamper/substitution 全部 fail closed。 |
 
-`FE-008a/009a/010a/011a/011b/012a`、`IR-000a/007a/001a/002a/003a`、`FND-004a`、`BE-001a`、`RT-002a` 与 `TC-001a` 的实现及交付验收均已关闭，不再重做已出现的 registry/executor/envelope/TargetMachine/runtime/resolver；当前只启动 `IR-004a/005a`，其后才实现 `RT-002b`、`BE-002a/004a`、`REL-001a`、`VERT-001` 和 `REL-002a`。只有这条纵切通过后，才进入控制流和广泛语法的 Phase 2B。
+`FE-008a/009a/010a/011a/011b/012a`、`IR-000a/007a/001a/002a/003a/004a/005a`、`FND-004a`、`BE-001a`、`RT-002a` 与 `TC-001a` 的实现及交付验收均已关闭，不再重做已出现的 registry/executor/envelope/TargetMachine/runtime/resolver；当前进入 `IR-008a`、`RT-002b`、`BE-002a/004a`、`REL-001a`、`VERT-001` 和 `REL-002a`。只有这条纵切通过后，才进入控制流和广泛语法的 Phase 2B。
 
 | 子任务 | 必须交付的关闭证据 |
 | --- | --- |
@@ -139,8 +139,8 @@ ts2bin test --stage frontend
 | `BE-001a` | IR-000a | 建立 Go-LLVM wrapper、锁定 Linux x86-64 TargetMachine/DataLayout，并让独立最小 module 通过 VerifyModule/object emission；不依赖完整 MIR |
 | `RT-002a` | IR-000a | 建立 Cargo workspace、empty startup、最小 umbrella staticlib 和 toolchain/runtime manifest scaffold；不伪造尚未绑定的 MIR ABI/capability |
 | `TC-001a` | FE-011b, BE-001a, RT-002a | resolver 只语义消费 canonical BuildPlan 与 toolchain/runtime manifests，用 typed input/output envelope（canonical bytes + digest，不是 fact 标签）绑定 immutable TargetContext + authoritative DataLayout + AvailableCapabilityCatalog，并不可变保留 HIR 供下一 pass join；首切只接受显式 Linux x86-64、LLVM 20、generic CPU、no-EH 和锁定 runtime，其余 fail closed；测试 non-empty available catalog 与后续 empty add bound closure 可并存 |
-| `IR-004a` | IR-003a, TC-001a | RepresentationPlan join pre-verifier 同时消费 verified HIR、BuildPlan 与 resolver envelope，核对 HIR FrontendSnapshotHash == BuildPlan.FrontendHash 及 context/request hashes 后，才降为 target-aware 单 block MIR；无 placeholder store/phi/call |
-| `IR-005a` | IR-004a | MIR artifact 固化 HIR/BuildPlan/CompilerBuildIdentity/TargetContext/DataLayout/catalog/logical requirement provenance；verifier 独立验证 dense/unique IDs（含 module-level duplicate FunctionID）、RepType/DataLayout、return/effect/provenance/capability，并从 structural MIR 生成精确 BoundCapabilityClosure；malformed MIR 不进入 backend |
+| `IR-004a` | `complete` | RepresentationPlan join pre-verifier 同时消费 verified HIR、BuildPlan 与 resolver envelope，核对 HIR FrontendSnapshotHash == BuildPlan.FrontendHash 及 context/request hashes 后，才降为 target-aware 单 block MIR；无 placeholder store/phi/call |
+| `IR-005a` | `complete` | MIR artifact 固化 HIR/BuildPlan/CompilerBuildIdentity/TargetContext/DataLayout/catalog/logical requirement provenance；verifier 独立验证 first-slice dense IDs、RepType/DataLayout、return/effect/provenance/capability，并从 structural MIR 生成显式空 BoundCapabilityClosure；malformed MIR 不进入 backend |
 | `IR-008a` | IR-003a, IR-005a | first-slice HIR/MIR canonical JSON/text serialization、schema-aware diff 与 `emit-hir --verify` / `emit-mir --verify` CLI；只消费已验证 artifact，明确拥有 P2A 的两条 IR 输出验收命令，不提前承诺完整 IR-008 |
 | `RT-002b` | RT-002a, IR-005a, TC-001a | 绑定 first-slice C ABI/artifact identity；生成函数固定为 `extern "C" double add(double,double)`，startup/harness 以 IEEE-754 bits 输入/输出，不含对象、GC 或 EH helper |
 | `BE-002a` | BE-001a, IR-005a, TC-001a | 只把 verified number-add MIR 降为 real LLVM，并通过 VerifyModule/object emission；不得直接消费未绑定 BuildPlan |
@@ -224,7 +224,7 @@ ts2bin test --stage static-core               # REL-001a
 1. `[complete] FE-008a/009a/010a/011a/011b`、`IR-000a`：lowering-complete snapshot、语义 proof、snapshot-only replay、truthful target/profile provenance 和唯一 pass contract 已冻结。
 2. `[complete] FND-004a`：`pqcqaq/typescript-go` fork remote、fork commit、reviewed upstream ancestor、parent gitlink/lock 和 fork verification/merge scripts 已落盘；本地 doctor、frontend/全仓回归、隔离 fork test/vet、replay 双构建、远端 fork fetch/full test/vet 和 committed parent HEAD clean-clone 均已通过。旧 patch/materialize/apply 机制不再是交付路径。
 3. `[complete] FE-012a, IR-007a/001a/002a/003a, BE-001a, RT-002a`：validated-input、number contract、HIR v2/compiler identity/logical requirements、number-only verifier、TargetMachine/DataLayout 与 Rust workspace/startup/manifests 已冻结并通过真实工具链验证。
-4. `[complete] BE-001a + RT-002a + BuildPlan -> TC-001a`：resolver 只解析请求/manifests，已产出 immutable TargetContext、authoritative DataLayout 和 AvailableCapabilityCatalog。`[ready] RepresentationPlan/IR-004a/005a` 下一步首次 join verified HIR，再实现 target-aware MIR、BoundCapabilityClosure 与真正 verifier；`IR-008a` 随后提供只消费 verified artifact 的 first-slice HIR/MIR 输出、验证与 diff CLI。再由 `RT-002b`、`BE-002a/004a` 完成固定 C ABI、真实 LLVM、object 和 LLD 链接能力。
+4. `[complete] BE-001a + RT-002a + BuildPlan -> TC-001a -> IR-004a/005a`：resolver 只解析请求/manifests；RepresentationPlan 已首次 join verified HIR/BuildPlan/TargetContext；number-only target-aware MIR、structural/final verifier 与显式空 BoundCapabilityClosure 均已由真实 LLVM 20 pipeline 复核。`[ready] IR-008a` 随后提供只消费 verified artifact 的 first-slice HIR/MIR 输出、验证与 diff CLI。再由 `RT-002b`、`BE-002a/004a` 完成固定 C ABI、真实 LLVM、object 和 LLD 链接能力。
 5. `REL-001a`：依赖 `IR-008a` 与 `BE-004a`，只建立首切需要的隔离/超时 case-runner core，拥有 `test --stage static-core`，并精确记录 snapshot/HIR/MIR/LLVM/object/output provenance；完整 handbook/diagnostic runner 留给 `REL-001`。
 6. `VERT-001`、`REL-002a`：由统一 runner 执行 Linux `add` 可执行纵切，再与 Node oracle 差分。
 

@@ -146,8 +146,9 @@
 | Typed artifact envelope substrate | complete | `PassArtifactEnvelope` 已提供 role/schema/payload-bound canonical digest、immutability 与 executor transition checks；resolver 不把 HIR误列为语义输入，RepresentationPlan 才声明首次 join；这只是 `TC-001a` 基础设施 |
 | `BE-001a`, `RT-002a` | complete | Go-LLVM 20.1.8 TargetMachine/DataLayout 与 deterministic ELF object emission 已闭合；Rust 1.97.1 workspace、ABI schema、empty startup、唯一 umbrella staticlib、runtime manifest 与重复构建 byte identity 已闭合 |
 | `TC-001a` | complete | resolver 只读取 BuildPlan/toolchain/runtime manifests；生产 handler 绑定真实 TargetMachine，输出 immutable TargetContext、authoritative DataLayout 与非空 AvailableCapabilityCatalog，并原样保留 opaque HIR sidecar |
-| `IR-004a/005a` | ready | 当前由 RepresentationPlan 首次 join HIR/BuildPlan/TargetContext provenance，再实现 target-aware 单 block MIR、structural/final verifier 与空 add BoundCapabilityClosure |
-| `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | blocked | 等待 verified target-aware MIR，再完成固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential |
+| `IR-004a/005a` | complete | RepresentationPlan 已首次 join HIR/BuildPlan/TargetContext provenance；target-aware 单 block f64 MIR、structural/final verifier 与显式空 add BoundCapabilityClosure 已由 LLVM 20 end-to-end pass pipeline 验证 |
+| `IR-008a` | ready | 为已验证 first-slice HIR/MIR 提供 canonical emit/verify/diff CLI，不扩大语法面 |
+| `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | ready | 按依赖顺序完成固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential |
 | Phase 2B: primitive control flow | blocked | Phase 2A 通过后再扩 bool、变量、调用、CFG、string/null/undefined 和单次求值消糖 |
 | `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |
 | Broad Phase 2+ | blocked | 第一真实纵切通过后再扩对象/runtime/modules/generics/EH/async/第二目标 |

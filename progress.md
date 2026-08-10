@@ -281,3 +281,12 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - `PassArtifactEnvelope` 只标为基础设施 complete：它提供 role/schema/payload-bound digest 与不可变 transition。`TC-001a` 仍 pending，必须等待真实 `BE-001a` LLVM TargetMachine/DataLayout 与 `RT-002a` runtime/toolchain manifests，不能用 fixture payload、MIR v1兼容 verifier 或 fact labels 冒充完成。
 - 旧 patch checkout 下的核心回归只保留为历史证据；fork 迁移后的核心六包（普通与 race）、串行 `go vet -p 1 ./...`、`go test -p 1 ./... -count=1`、doctor、frontend 九阶段、locked replay 双构建、本地隔离和远端 fork verification 已通过。current committed HEAD clean-clone 是最后一项交付门禁。
 - 调整后的下一顺序：`BE-001a || RT-002a -> TC-001a -> IR-004a/005a -> RT-002b + BE-002a/004a -> REL-001a -> VERT-001 -> REL-002a`。Phase 2B、对象、GC、EH、async 和第二目标继续 blocked。
+
+## 2026-08-10 Phase 2A IR 关闭（当前状态）
+
+- `BuildPlan` wire 已下沉到 checker-free `internal/buildplan`；`targetcontext` 与 `bingomir` 的依赖闭包不再包含 AST、parser、binder、checker、tsoptions 或 tsfrontend。
+- `IR-004a` 已关闭：RepresentationPlan pre/post verifier 同时解码并交叉校验 typed HIR、BuildPlan、TargetContext、DataLayout、AvailableCapabilityCatalog、toolchain/runtime manifests，拒绝有效重哈希后的 HIR/BuildPlan substitution。
+- `IR-005a` 已关闭：独立 first-slice target-aware MIR 使用 `RepF64`/`fadd`，固化全部上游 provenance；structural/final verifier 验证 dense IDs、representation、return/effect 和内容 hash；capability binding 从 structural MIR 生成显式空 `BoundCapabilityClosure`。
+- canonical production pipeline 已真实执行全部 14 个 pass，两次相同输入的 final MIR 与逐 pass dump byte identity 稳定；现有 general MIR v1 verifier 保持独立，未被冒充为 first-slice target-aware verifier。
+- 验证通过：Windows `go test -p=1 ./... -count=1`、`go vet ./...`、checker-free dependency audit；WSL/LLVM 20 `go test -tags=llvm20 ./internal/bingomir ./internal/targetcontext ./internal/llvmbackend -count=1`。
+- 下一顺序固定为 `IR-008a -> RT-002b + BE-002a -> BE-004a -> REL-001a -> VERT-001 -> REL-002a`。`VERT-001` 是第一个 Linux x86-64 可执行文件；真实自举仍需 Phase 2B 的变量、调用、控制流、模块和最小 self-hosted stdlib contract。
