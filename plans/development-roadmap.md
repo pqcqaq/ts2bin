@@ -121,7 +121,7 @@ export function add(a: number, b: number): number { return a + b; }
 
 1. 实现 literal、identifier、unary/binary、call、variable、return、if/while/for/switch/conditional 的 HIR builder 与 CFG lowering。
 2. 将 flow narrowing、literal widening、`never`/unreachable 转成 HIR facts；不在 lowering 中重新猜测类型。
-3. 固定 bool、null/undefined 与 UTF-16 string 的表示和 ABI，再实现对应 conversion/operator table。
+3. `[in progress]` 固定 bool、null/undefined 与 UTF-16 string 的表示和 ABI，再实现对应 conversion/operator table。`IR-007b` 已冻结 boolean 的 canonical `i1` MIR 表示、C ABI `uint8_t` 0/1 边界、直接 condition branch 和禁止 number 隐式互转；null/undefined 与 UTF-16 string 仍待后续纵切。
 4. 实现 `as`、`satisfies`、non-null、nullish/optional chain 和 logical assignment 的单次求值消糖。
 5. 扩展 HIR/MIR verifier 的 dominance、phi、短路、cleanup/effect 规则；实现保序常量折叠，不做跨函数激进优化。
 

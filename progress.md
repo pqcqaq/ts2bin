@@ -326,3 +326,10 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - checked-in case 增加 canonical qNaN，与原有普通值、`-0` 一起执行 expected/native executable/Node 三方比较；冷启动总 case timeout 调整为 10 秒，仍受 60 秒 manifest 上限约束。
 - 使用 fork commit `a77f97525c6a262e8c4dbb8c86fffd989d566c08` 构建真实 LLVM 20 CLI 后，`ts2bin test --stage static-core --json` 返回 `ok=true`，三个 execution 全部一致；真实 ELF executable SHA-256 为 `7fad9cb1bd23a3b8f9d797989c38ee96e0549a18bfa33c1e3257de633880a926`。
 - Phase 2A 退出，Phase 2B 进入 ready。这里证明的是受限 `add(number, number)` 可执行纵切，不是通用 TypeScript 程序编译能力；self-hosted stdlib 仍依赖 Phase 2B 的变量/调用/控制流，以及 Phase 4 的模块、泛型、集合与 stdlib package contract。
+
+## 2026-08-11 Phase 2B IR-007b 完成
+
+- 新增 canonical boolean contract：source boolean 在 target MIR 使用 `i1`，C ABI 使用 `uint8_t` 且只接受 0/1，condition 直接按 i1 分支，禁止与 number 隐式互转。
+- `PrimitiveRepresentationBinding` 成为 boolean/number 到 `i1`/`f64` 的唯一映射入口；现有 number-only RepresentationPlan 仍生成原有单一 binding，Phase 2A artifact bytes 未被扩张。
+- alternative contract、非 canonical ABI byte 和 unsupported primitive representation 的 negative tests 已通过；HIR/MIR/backend/CLI 相关包 test/vet 回归全绿。
+- 下一纵切固定为 `choose(flag: boolean, left: number, right: number): number`，依次关闭 snapshot/HIR/CFG verifier、target-aware MIR/LLVM 与 uint8 ABI/Node differential。
