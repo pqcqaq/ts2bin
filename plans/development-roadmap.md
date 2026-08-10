@@ -125,7 +125,7 @@ export function add(a: number, b: number): number { return a + b; }
 4. 实现 `as`、`satisfies`、non-null、nullish/optional chain 和 logical assignment 的单次求值消糖。
 5. 扩展 HIR/MIR verifier 的 dominance、phi、短路、cleanup/effect 规则；实现保序常量折叠，不做跨函数激进优化。
 
-第一条控制流纵切已关闭：`choose(flag, left, right)` 从 validated snapshot 经 boolean/number HIR、三块 CFG、RepresentationPlan、i1/f64 MIR、严格 i8 ABI 和真实 LLVM conditional branch/trap 生成 deterministic ELF；独立 harness 对 true/false 两支完成进程执行和 Node differential，并证明非 canonical byte 在 ABI 入口被进程拒绝。第二条 `calllocal` 纵切也已关闭：同一 snapshot-only pipeline 生成 internal `add`、exported `compute`，以 SSA local bind/assign 和签名绑定 direct call 生成多函数 HIR/MIR、internal-linkage LLVM helper、独立 harness，并完成真实 ELF/Node differential。下一纵切接入 loop/general CFG 与 SSA/phi。
+前三条 Phase 2B 可执行纵切已关闭：`choose(flag, left, right)` 证明 boolean/number HIR、三块 CFG、i1/f64 MIR、严格 i8 ABI 与真实 LLVM conditional branch；`calllocal` 证明 SSA local bind/assign、签名绑定 direct call、多函数 HIR/MIR 与 internal-linkage LLVM helper；`loop` 证明 `while` source proof、`<` lowering、general CFG、显式 incoming edge、loop-carried phi 与 back edge。三者均由 deterministic ELF 独立进程执行并与锁定 Node oracle 差分，malformed source/HIR/MIR/CFG/phi 在 LLVM 前 fail closed。下一纵切固定 string/nullish representation，随后进入 optional/nullish/logical assignment 的单次求值消糖；这不表示整个 Phase 2B 已完成。
 
 ### 验收门槛
 

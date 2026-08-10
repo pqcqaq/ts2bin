@@ -163,8 +163,9 @@ Phase 2B 继续按可执行纵切关闭，不能一次性把完整 `IR-001..008`
 | `IR-004b/005b + BE-002b` | `complete` | IR-001b/002b/003b | RepresentationPlan 已按 HIR 实际类型绑定 number/f64 与 boolean/i1；choose 生成三块 target-aware MIR，verifier 复验 CFG/类型/hash，LLVM 生成严格 i8 ABI 入口、i1 branch、trap 和 deterministic ELF object；malformed MIR 不到达 backend。 |
 | `RT-002c + REL-001b/002b + VERT-002` | `complete` | IR-004b/005b, BE-002b | C ABI 以 `uint8_t` 传递 flag 并严格拒绝非 0/1；独立 choose harness、真实 ELF true/false、锁定 Node oracle、非 canonical byte 进程拒绝及全部 artifact/output provenance 已进入 canonical report。 |
 | `IR-001c/002c/003c + BE-002c + REL-002c + VERT-003` | `complete` | VERT-002 | `calllocal` 真实 snapshot 生成 internal `add` 与 exported `compute`；SSA local bind/assign、签名绑定 direct call、多函数 HIR/MIR verifier、internal-linkage LLVM helper、独立 compute harness、真实 ELF 与 Node 22.22.0 differential 通过。 |
+| `IR-001d/002d/003d/004d/005d + BE-002d + REL-002d + VERT-004` | `complete` | VERT-003 | `loop` 真实 snapshot 生成 `while`、`<`、header/body/exit CFG 与 loop-carried value；HIR v4/MIR v2 显式保存 incoming block，phi verifier 按入边验证定义支配并接受 back edge；LLVM 20 生成真实 phi、`fcmp olt`、back edge 和 exit，四组 binary64 输入与锁定 Node oracle 一致。 |
 
-下一条纵切固定为 loop/general CFG + SSA/phi；它必须继续使用 validated snapshot、现有 canonical pass DAG、Phase 2B HIR/MIR verifier、真实 LLVM runner 和 Node oracle。
+下一条纵切固定为 string/nullish representation 与 ABI，随后实现 optional chain、nullish coalescing、logical assignment 的单次求值 lowering。它们必须继续使用 validated snapshot、现有 canonical pass DAG、Phase 2B HIR/MIR verifier、真实 LLVM runner 和 Node oracle；当前 loop 关闭不能被解释为完整 `IR-001..008` 或整个 Phase 2B 完成。
 
 阶段退出命令目标：
 

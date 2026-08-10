@@ -362,3 +362,10 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - HIR verifier 支持多函数 dense `FunctionID`、唯一 exported function、call 的 callee/参数/返回类型/effect 校验；local binding/assignment 以 SSA value alias 更新，不引入未证明内存 place。MIR 同步保留 `Callee`/visibility，helper 必须是较早函数且禁止递归。
 - LLVM 20 生成 internal-linkage `add` helper 和 exported `compute`；runtime 新增并认证 `bingo_compute_harness.o`。runner/Node oracle 对 NaN、负零和普通值三组输入执行真实 ELF，全部与 Node 22.22.0 一致；runtime manifest/content hash 已同步到 lock 和 fixtures。
 - 定向 Go packages 与 WSL LLVM 20 `ts2bin test --stage static-core --case testdata/ts2bin/calllocal --json` 通过。下一纵切为 loop/general CFG + SSA/phi。
+
+## 2026-08-11 Phase 2B loop/general CFG + SSA/phi 完成
+
+- fork commit `74546c56984e4afea7801d35d7fff38ed4f19497` 将 HIR 升为 v4、Phase 2B target-aware MIR 升为 v2，并为 phi 显式保存 incoming block identity；verifier 按每条入边验证 value 定义支配关系，正确接受 loop back edge。
+- `testdata/ts2bin/loop` 从真实 validated snapshot 生成 `while (value < limit)` 的 header/body/exit CFG、loop-carried phi、`fcmp olt` 与 back edge；source/HIR/MIR tamper 和 malformed CFG/phi 在 backend 前拒绝。
+- Windows 定向 Go 包、WSL LLVM 20 backend/MIR/runner tests 通过；真实 deterministic ELF 对多次 back edge、overshoot、`-0` 和 NaN-condition-false 四组 binary64 输入与 Node 22.22.0 一致。
+- Phase 2B 仍为 in progress。下一纵切为 string/nullish representation 与 ABI，随后实现 optional/nullish/logical assignment 的单次求值消糖。编译器本体仍由 Go 实现，不属于现行 self-hosted stdlib 或 compiler-bootstrap 里程碑。

@@ -60,7 +60,7 @@ TypeScript source
 - 普通 TypeScript 对象允许循环引用，general static profile 默认使用非移动 tracing GC；ARC/arena 只能作为有额外可证明约束的受限 profile。
 - `Array<T>` 的可变元素默认不变，`ReadonlyArray<T>` 和只读字段才允许协变；tsgo 的历史兼容性结果不能直接当作 Bingo 布局安全证明。
 - `typescript-go` 的现行交付来自 `pqcqaq/typescript-go` 的固定 fork commit；lock 同时记录 reviewed Microsoft upstream ancestor，更新通过显式 upstream merge 与完整 compatibility gate。旧 patch/materialize/apply 机制已经退役，仅可作为标明已废弃的历史证据出现。
-- Phase 1.5 与 Phase 2A 已关闭。`FE-012a`、`IR-007a/001a/002a/003a/004a/005a/008a`、`BE-001a/002a/004a`、`RT-002a/002b`、`TC-001a`、`REL-001a`、`VERT-001` 与 `REL-002a` 均有真实证据：严格 case manifest/timeout、真实 LLVM/object/LLD、runtime ABI map proof、可执行 bit harness、完整 artifact provenance report，以及 Node 22.22.0 对普通值、`-0` 和 canonical qNaN 的三方 binary64 差分。当前进入 Phase 2B；对象、GC、EH、async、模块、self-hosted stdlib 和第二目标仍按后续阶段边界 blocked。
+- Phase 1.5 与 Phase 2A 已关闭；Phase 2B 已完成 `choose`、`calllocal` 和 `loop` 三条真实 LLVM/object/LLD/进程/Node 纵切，覆盖 boolean branch、SSA local/direct call、general CFG 与 edge-aware phi。下一步是 string/nullish representation 和单次求值消糖；Phase 2B 尚未整体关闭，对象、GC、EH、async、模块、self-hosted stdlib 和第二目标仍按后续阶段边界 blocked。
 
 ## 交付物与唯一事实来源
 

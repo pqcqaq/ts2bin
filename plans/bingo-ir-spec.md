@@ -1,6 +1,6 @@
 # Bingo IR 初始规格
 
-本文定义当前 Bingo HIR v2 与 pre-release MIR v1 的最小可实现形式。HIR v2 已冻结 mandatory compiler provenance、logical capability requirements 与 number-only first-slice verifier；MIR v1 仍保持原通用 structural 语义，真正 target-aware MIR/provenance 由 `IR-004a/005a` 建立。它不是 LLVM IR 的别名，也不是 TypeScript AST 的序列化版本。
+本文定义 Bingo HIR/MIR 的通用目标契约。当前已交付 schema 是 HIR v4 与 Phase 2B target-aware MIR v2：HIR v2 冻结 number-only first-slice provenance，HIR v3 增加多函数/direct-call，HIR v4 与 MIR v2 为 CFG phi 显式保存 incoming block identity，使 verifier 能按入边验证 loop back edge 的支配关系。旧 Phase 2A verifier 继续冻结，扩展语法由独立 Phase 2B verifier 验证。它不是 LLVM IR 的别名，也不是 TypeScript AST 的序列化版本。
 
 ## 1. 分层职责
 
@@ -344,4 +344,4 @@ MIR: HIR provenance + BuildPlan digest + TargetContext hash
 
 HIR canonical hash 必须覆盖全部 provenance；缺失、未知 schema major 或格式错误均由 verifier 拒绝。`RepresentationPlan` join pre-verifier 必须验证 HIR 的 `FrontendSnapshotHash` 与 `BuildPlan.FrontendHash` 相同，并验证 resolver output 与 BuildPlan 请求一致；replay/post-verifier 也必须交叉核对来源 plan，不能只在篡改后重新计算 HIR hash。MIR 构造把 available catalog 与后续 bound closure 分别哈希。
 
-reader 只保证读取同一 major IR version。mandatory provenance 在 pre-release v1 期间变化后已由 `IR-001a` 协调更新 `HIRSchemaVersion`、replay、lock 的 `bingoIR` 和旧 major 拒绝测试；Phase 2B 多函数/direct-call contract 将当前 reader 升为 HIR v3。缓存命中必须比较全部 digest；不能只比较源文件时间戳。
+reader 只保证读取同一 major IR version。mandatory provenance 在 pre-release v1 期间变化后已由 `IR-001a` 协调更新 `HIRSchemaVersion`、replay、lock 的 `bingoIR` 和旧 major 拒绝测试；Phase 2B 多函数/direct-call contract 将 reader 升为 HIR v3，loop/general CFG 的 edge-aware phi contract 再升为 HIR v4，并同步 MIR v2、pass envelope、golden、lock 和旧 major rejection。缓存命中必须比较全部 digest；不能只比较源文件时间戳。

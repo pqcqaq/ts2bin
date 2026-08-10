@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "lockFormat": "ts2bin.lock.v2",
   "typescriptGo": {
-    "commit": "c662df60a06fa7771addd8d2cd8bebc7a8c72d91",
+    "commit": "74546c56984e4afea7801d35d7fff38ed4f19497",
     "upstreamCommit": "86cc4767d4ebadb9b7845d0ab8eb2b05785c3fee",
-    "forkCommit": "c662df60a06fa7771addd8d2cd8bebc7a8c72d91",
+    "forkCommit": "74546c56984e4afea7801d35d7fff38ed4f19497",
     "forkRemote": "https://github.com/pqcqaq/typescript-go.git",
     "reproducibilityStatus": "pinned-fork-commit",
     "remote": "https://github.com/microsoft/typescript-go.git",
@@ -22,7 +22,7 @@
     "bingoOptions": 1,
     "diagnostics": 1,
     "compatibility": 1,
-    "bingoIR": 3,
+    "bingoIR": 4,
     "runtimeABI": 1
   },
   "runtime": {
