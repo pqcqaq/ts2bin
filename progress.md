@@ -273,7 +273,7 @@ go run ./cmd/ts2bin compatibility --update-baseline
 
 ## 2026-08-06 Phase 2A 入口复审（当前状态）
 
-- `typescript-go` 现行交付已迁移到 `https://github.com/pqcqaq/typescript-go.git` 的 pinned fork commit；lock 同时固定 reviewed upstream ancestor，upstream 更新只允许显式 merge。旧 patch/materialize/apply 机制不再活跃。本地 doctor、隔离 fork smoke/full test/vet、frontend 九阶段、locked replay 双构建和远端 fork verification 已通过；仅 committed parent HEAD clean-clone 待执行。
+- `typescript-go` 现行交付已迁移到 `https://github.com/pqcqaq/typescript-go.git` 的 pinned fork commit；lock 同时固定 reviewed upstream ancestor，upstream 更新只允许显式 merge。旧 patch/materialize/apply 机制不再活跃。本地 doctor、隔离 fork smoke/full test/vet、frontend 九阶段、locked replay 双构建、远端 fork verification 和 committed parent HEAD clean-clone 已通过。
 - 总体方向继续采用两条语义支路：validated FrontendSnapshot -> target-independent HIR；BuildPlan + toolchain/runtime manifests -> TargetContext。执行器可以在 HIR 后调度 resolver并用 envelope 保留 HIR，但 resolver 不语义读取 HIR；首次 provenance join 固定在 RepresentationPlan。
 - `FE-012a` 已关闭：`Frontend.Build` 返回 canonical 深拷贝 sealed snapshot，外部 diagnostics 与 snapshot 脱离；`RunSubsetGate` 自行完整验证，production replay 在 in-memory、serialized、frontend-wrapper 三条路径拒绝重哈希 using/async/decorator/any/unknown 篡改。
 - `IR-007a` 已关闭：number contract v1 固定 binary64、canonical qNaN、保留 `-0`、round-to-nearest ties-to-even/no-fast-math 加法，以及固定 C ABI/bit observation；替代表示、policy、operator 或 ABI 均 fail closed。

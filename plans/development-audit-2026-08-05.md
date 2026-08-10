@@ -16,7 +16,7 @@ typed HIR + TargetContext
   -> Rust runtime C ABI + LLD
 ```
 
-不需要改成从 AST 直接生成 LLVM，也不需要引入完整 JavaScript engine 作为 static profile 的基础。Phase 1.5 的实现契约与后续 Phase 2A 入口契约已经关闭；现行交付已迁移到 `pqcqaq/typescript-go` 固定 fork commit，本地 doctor、frontend/全仓回归、隔离 fork test/vet、replay 双构建和远端 fork verification 已通过，仅 committed-parent clean-clone 待执行。当前下一步仍是并行的 LLVM TargetMachine/DataLayout 与 Rust runtime-manifest scaffold，primitive real-LLVM 纵切尚未完成，闭合前绝不扩大语法面。当前详细契约、证据状态和依赖调整以第 10.6 节为准。
+不需要改成从 AST 直接生成 LLVM，也不需要引入完整 JavaScript engine 作为 static profile 的基础。Phase 1.5 的实现契约与后续 Phase 2A 入口契约已经关闭；现行交付已迁移到 `pqcqaq/typescript-go` 固定 fork commit，本地 doctor、frontend/全仓回归、隔离 fork test/vet、replay 双构建、远端 fork verification 和 committed-parent clean-clone 均已通过。当前下一步仍是并行的 LLVM TargetMachine/DataLayout 与 Rust runtime-manifest scaffold，primitive real-LLVM 纵切尚未完成，闭合前绝不扩大语法面。当前详细契约、证据状态和依赖调整以第 10.6 节为准。
 
 ## 2. 审计证据
 
@@ -25,18 +25,18 @@ typed HIR + TargetContext
 关键事实：
 
 - 父仓库 `.gitmodules` 与 root lock 现指向 `https://github.com/pqcqaq/typescript-go.git`；lock/gitlink/checkout 固定同一 fork commit，并单独记录 reviewed Microsoft upstream ancestor。上游同步采用显式 merge，不再使用 patch/materialize/apply 交付。
-- `ts2bin.lock.json` 使用 lock schema 2、snapshot schema 2 和 `reproducibilityStatus: pinned-fork-commit`；fork remote/commit、upstream ancestor、108 个 bundled lib、Go/LLVM/LLD 版本和 semantic baseline 均由锁与生成物约束。本地和远端 fork 迁移验收命令已通过；仅 committed-parent clean-clone 待执行。
+- `ts2bin.lock.json` 使用 lock schema 2、snapshot schema 2 和 `reproducibilityStatus: pinned-fork-commit`；fork remote/commit、upstream ancestor、108 个 bundled lib、Go/LLVM/LLD 版本和 semantic baseline 均由锁与生成物约束。本地、远端 fork 与 committed-parent clean-clone 迁移验收命令均已通过。
 - `NodeSnapshot` 的 Kind-driven payload/role/arity shape registry、checker capture fail-closed、semantic proof、module/effect/lowerer registries 与 ownership/redirect 负例均已进入实现；`frontendwire.ValidateProgramSnapshot` 是 serialized validator 单一真源，`tsfrontend` 只保留委托 API，capture analyzer 只产出 proof。
 - `ReplayFrontendSnapshot` 已改为消费 `frontendwire` DTO；`go list -deps ./cmd/ts2bin-replay` 当前只保留 replay/IR 侧依赖，不再包含 parser、binder、checker、AST 或 tsoptions。独立进程重复运行、显式 primitive evaluation-order events、单 block return HIR、tamper post-verifier 与 migration full regression 均已进入 checked-in tests 并通过。
 - `FrontendSnapshot` capture 已在源头剥离 backend fields，三项遗漏 TypeScript options 已投影，`ResolveBuildPlan` 绑定 validated snapshot；target/path/profile/cache regression、rooted-path 门禁与 no-EH 默认值均已闭合。`ResolveBuildPlan` 只产生 canonical unresolved request，Phase 2A capability 真值由 `ResolveTargetContext` 负责。
 - Bingo 已加入 canonical `PassExecutor`、specialization budget/fixed-point、pre/post verifier、独立 effect proof、deterministic dump/golden；primitive replay 已绑定真实 validate-snapshot -> typed-HIR production handlers，并拒绝缺 handler、篡改 HIR 与错误求值顺序。`IR-000` complete；typed HIR 之后的 production handlers 与真正 target-aware MIR verifier属于 Phase 2A。
-- Phase 1.5 的 wire/option/pass 实现门与 Phase 2A 的 number-only HIR schema hardening/typed envelope substrate 已关闭；fork 交付迁移的本地和远端 clean-delivery 证据已重跑，committed-parent clean clone 是最后一项待执行门禁。剩余编译器差距是实际 TargetMachine/DataLayout、空 runtime/toolchain manifests、TargetContext resolver、target-aware MIR、real LLVM/object/LLD、case runner 和 Node differential；不能只凭 happy-path `go test` 或 fixture envelope 关闭。
+- Phase 1.5 的 wire/option/pass 实现门与 Phase 2A 的 number-only HIR schema hardening/typed envelope substrate 已关闭；fork 交付迁移的本地、远端和 committed-parent clean-delivery 证据均已通过。剩余编译器差距是实际 TargetMachine/DataLayout、空 runtime/toolchain manifests、TargetContext resolver、target-aware MIR、real LLVM/object/LLD、case runner 和 Node differential；不能只凭 happy-path `go test` 或 fixture envelope 关闭。
 
 ### 2.1 二次复核状态（以本节为准）
 
 | 项目 | 当前状态 | 证据 | 关闭条件 |
 | --- | --- | --- | --- |
-| `FND-004` | `acceptance-blocked` | 现行 `.gitmodules`/lock/gitlink 已迁移到 `pqcqaq/typescript-go` 固定 fork commit，reviewed upstream ancestor 与 fork verification/merge scripts 已定义；本地 doctor、frontend/全仓门禁、隔离 test/vet、replay 双构建及远端 fetch/full test/vet 已通过，旧 patch 路径已退役 | 从 committed parent HEAD clean-clone 重跑门禁 |
+| `FND-004` | `complete` | 现行 `.gitmodules`/lock/gitlink 已迁移到 `pqcqaq/typescript-go` 固定 fork commit，reviewed upstream ancestor 与 fork verification/merge scripts 已定义；本地 doctor、frontend/全仓门禁、隔离 test/vet、replay 双构建、远端 fetch/full test/vet 及 committed parent HEAD clean-clone 均已通过，旧 patch 路径已退役 | 进入 Phase 2A |
 | `FE-008` | `complete` | Kind shape registry、payload/role negative tests、wire 单一 serialized validator 与 full regression 通过 | 保持 wire 为唯一规则源；schema 变化继续走 migration gate |
 | `FE-009` | `complete` | module binding/effect registry/fixed-point/lowerer readiness、ownership/redirect 负例与 wire round-trip 通过 | 新 proof 必须同时有 capture 正例和 wire corruption 负例 |
 | `FE-010` | `complete` | checker-free wire/replay、依赖闭包、重复运行、evaluation-order/single-block HIR、篡改拒绝及 migration regression 通过 | 纳入最终 fork/clean delivery |
@@ -105,7 +105,7 @@ typed HIR + TargetContext
   -> [complete] FE-011b truthful no-EH first-slice BuildPlan/default
   -> [complete] FE-010 full migration regression
   -> [complete] IR-000 executable contract infrastructure
-  -> [acceptance-blocked] FND-004 authorized parent commit + HEAD clean-clone proof
+  -> [complete] FND-004 authorized parent commit + HEAD clean-clone proof
   -> Phase 2A: remaining production handlers + IR-001a..005a/007a number-only HIR/MIR/verifier
   -> RT-002a empty runtime/startup + BE-001/002a/004a real LLVM/object/link
   -> REL-001a first-slice runner core
@@ -155,7 +155,7 @@ GC v1 先做 single-mutator、stop-the-world、non-moving tracing。每个 safep
 3. `FE-011b`：首切使用 canonical `exceptions=none`（或等价明确名称），default/lock/BuildPlan 不再声称尚未实现的 `llvm-eh`；status-code/native-unwind 保留为后续独立 profile。
 4. `FE-010a`：新进程从磁盘 replay；`go list -deps` 闭包无 parser/checker/AST/tsoptions；events/HIR 有显式 primitive evaluation-order/single-block proof；compatibility/snapshot/options migration full regression 全绿。
 5. `IR-000a`：executor、specialization budget/fixed point、pre/post verifier hooks、independent effect proof、每步 dump/golden 与 validate-snapshot -> typed-HIR production prefix 通过全量 regression；后续 production handlers 与真正 MIR target/layout verifier留在 Phase 2A。
-6. `FND-004a`：关闭条件是 `.gitmodules`、lock、parent gitlink 与 checkout 固定同一 `pqcqaq/typescript-go` fork commit，reviewed upstream 是其祖先，并通过 doctor、远端 fork fetch/full test/vet 和 committed parent HEAD clean clone。本地 doctor/full test/vet、frontend 九阶段、replay 双构建及本地和远端隔离 verifier 已通过；仅 committed parent clean clone 待执行。
+6. `FND-004a`：关闭条件已满足：`.gitmodules`、lock、parent gitlink 与 checkout 固定同一 `pqcqaq/typescript-go` fork commit，reviewed upstream 是其祖先，doctor、远端 fork fetch/full test/vet、committed parent HEAD clean clone、本地 doctor/full test/vet、frontend 九阶段、replay 双构建及本地和远端隔离 verifier 均已通过。
 
 ## 7.1 Primitive vertical slice gate（历史初版；当前以 10.4 节为准）
 
@@ -275,7 +275,7 @@ go test ./... -count=1
 
 `[历史，已退役机制]` 二次审计时的核心六包、frontend 九阶段、全仓 test/vet、doctor materialized-exact、`b2dca40` clean clone 与 isolated patch apply 曾通过；旧 patch SHA-256 只解释当时证据，不代表现行 checkout。
 
-现行交付使用 `pqcqaq/typescript-go` 的 pinned fork commit、reviewed upstream ancestor 和显式 upstream merge。相关 `.gitmodules`、lock 与脚本迁移已经落盘；本地 doctor、迁移后的 frontend/全仓回归、locked replay 双构建和隔离 fork full test/vet，以及远端 fork fetch/full test/vet 已通过；`FND-004` 仅因 committed parent HEAD clean-clone 尚未执行而保持 `acceptance-blocked`。
+现行交付使用 `pqcqaq/typescript-go` 的 pinned fork commit、reviewed upstream ancestor 和显式 upstream merge。相关 `.gitmodules`、lock 与脚本迁移已经落盘；本地 doctor、迁移后的 frontend/全仓回归、locked replay 双构建和隔离 fork full test/vet、远端 fork fetch/full test/vet，以及 committed parent HEAD clean-clone 已通过；`FND-004` 已关闭。
 
 ### 10.4 调整后的 Phase 2A 顺序
 

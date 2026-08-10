@@ -273,7 +273,7 @@ ts2bin doctor      # tsgo/LLVM/runtime capability audit
 本节只保留优先级视图；稳定 issue ID、依赖和退出命令以 [implementation-backlog.md](implementation-backlog.md) 为准：
 
 ```text
-P0  [implementation complete; FND-004a acceptance-blocked] Phase 1.5: FE-008a/009a/010a/011a/011b, IR-000a; committed-parent clean-clone pending
+P0  [complete] Phase 1.5: FE-008a/009a/010a/011a/011b/012a, IR-000a/007a/001a/002a/003a, FND-004a
 P0  [in progress] Phase 2A: [complete] FE-012a + IR-007a/001a/002a/003a
     || [ready] BE-001a || RT-002a
     -> [blocked] TC-001a -> IR-004a/005a

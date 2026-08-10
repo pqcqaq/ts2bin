@@ -133,7 +133,7 @@
 | Direction audit | complete | 保留总体架构；Phase 1.5 实现契约已完成、Phase 2A 可启动；当前 pinned-fork 交付迁移已落盘但 FND-004 验收待执行，阻断证据和调整后的依赖已写入审计报告/backlog |
 | CLI/profile fix | complete | 未显式 override 时保留完整 `bingoOptions`；显式 `--profile` 只改变 profile；定向测试通过 |
 | Assertion proof bridge | complete | assertion chain、non-null、representation/flow proof 已进入 snapshot，并由 wire 独立重算、corruption negative 和 round-trip regression 闭合 |
-| `FND-004` | acceptance-blocked | 现行 submodule/lock 已迁移到 `pqcqaq/typescript-go` 的固定 fork commit，并以 reviewed upstream ancestor + fork commit 作为 compiler identity；旧 patch/materialize/apply 机制已退役。本地 doctor、frontend 九阶段、隔离 fork smoke/full test/vet、locked replay 双构建与远端 fork fetch/full test/vet 已通过；仅提交后 parent clean-clone 待执行 |
+| `FND-004` | complete | 现行 submodule/lock 已迁移到 `pqcqaq/typescript-go` 的固定 fork commit，并以 reviewed upstream ancestor + fork commit 作为 compiler identity；旧 patch/materialize/apply 机制已退役。本地 doctor、frontend 九阶段、隔离 fork smoke/full test/vet、locked replay 双构建、远端 fork fetch/full test/vet，以及 committed parent HEAD clean-clone 的 identity/clean-worktree/doctor 验收均已通过 |
 | `FE-008` | complete | Kind-driven payload/role/arity registry、单一 `frontendwire` serialized validator、rooted-path fail-closed 门禁与原 overlay 负例已实现；核心、race、shuffle/repeat、全仓 regression 通过 |
 | `FE-009` | complete | per-specifier binding、callee effect closure、exhaustive registry、lowerer facts、ownership/redirect 负例和 wire round-trip 已实现；serialized validator 双写已移除，核心与全仓 regression 通过 |
 | `FE-010` | complete | checker-free dependency closure、独立进程重复输出、显式 evaluation-order/single-block HIR 与 tamper post-verifier 已通过；migration baseline/golden regression 已闭合 |
@@ -151,4 +151,4 @@
 | `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |
 | Broad Phase 2+ | blocked | 第一真实纵切通过后再扩对象/runtime/modules/generics/EH/async/第二目标 |
 
-当前验证备注：`go list -deps ./cmd/ts2bin-replay` 已证明 production replay 不携带 parser/checker/AST；现行交付已迁移为 `pqcqaq/typescript-go` 固定 fork commit，旧 patch/materialize/apply 机制不再是活跃路径。doctor、frontend 九阶段、核心/全仓 test/vet、locked replay 双构建、本地和远端隔离 fork verification 已通过；仅提交后 current committed HEAD clean-clone 待执行。不要重复开发已存在的 registry/executor/envelope，也不要在首切 real-LLVM 纵切通过前进入 Phase 2B。
+当前验证备注：`go list -deps ./cmd/ts2bin-replay` 已证明 production replay 不携带 parser/checker/AST；现行交付已迁移为 `pqcqaq/typescript-go` 固定 fork commit，旧 patch/materialize/apply 机制不再是活跃路径。doctor、frontend 九阶段、核心/全仓 test/vet、locked replay 双构建、本地和远端隔离 fork verification，以及 committed parent HEAD clean-clone 已通过；可按既定依赖进入 Phase 2A。不要重复开发已存在的 registry/executor/envelope，也不要在首切 real-LLVM 纵切通过前进入 Phase 2B。

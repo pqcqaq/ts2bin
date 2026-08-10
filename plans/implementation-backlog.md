@@ -86,7 +86,7 @@ ts2bin test --stage frontend
 
 | ID | 状态 | 已验证结果 / 剩余工作 |
 | --- | --- | --- |
-| `FND-004` | `acceptance-blocked` | 交付机制已迁移为 `pqcqaq/typescript-go` 固定 fork commit，旧 patch/materialize/apply 路径已退役；本地 doctor、frontend 九阶段、隔离 fork smoke/full test/vet、locked replay 双构建与远端 fork fetch/full test/vet 已通过；仅 parent HEAD clean-clone 待执行。 |
+| `FND-004` | `complete` | 交付机制已迁移为 `pqcqaq/typescript-go` 固定 fork commit，旧 patch/materialize/apply 路径已退役；本地 doctor、frontend 九阶段、隔离 fork smoke/full test/vet、locked replay 双构建、远端 fork fetch/full test/vet 与 committed parent HEAD clean-clone 均已通过。 |
 | `FE-008` | `complete` | schema v2、Kind-driven payload/role/arity、fail-closed graph/hash validation 和 overlay 负例均已进入 wire 单一 validator；`tsfrontend` 仅保留委托 API，核心/race/full regression 通过。 |
 | `FE-009` | `complete` | property/signature/assertion/non-null/flow/capture、per-specifier bindings、effect closure、lowerer facts 和 ownership/redirect 负例已闭合；capture 只产出 proof，wire 独立重算并通过序列化 round-trip。 |
 | `FE-010` | `complete` | checker-free `frontendwire`/`ast2bingo`/replay process、dependency closure、重复输出、显式 evaluation-order/single-block HIR 和 tamper post-verifier 已通过；compatibility/snapshot/options migration baseline 已审查并全绿。 |
@@ -97,11 +97,11 @@ ts2bin test --stage frontend
 | `IR-001a/002a/003a` | `complete` | HIR major 2、CompilerBuildIdentity、identity-free source plan、logical requirements、number-only canonical HIR 与完整 malformed verifier matrix 已闭合；不同 driver identity 生成不同 HIR provenance/hash。 |
 | Typed artifact envelope substrate | `complete` | role/schema/payload digest、canonical envelope、不可变 transition 和 typed read/write metadata 已实现；resolver 只读取 BuildPlan/runtime/toolchain manifests，HIR 保留到 RepresentationPlan join。真实 `TC-001a` 仍未实现。 |
 
-`FE-008a/009a/010a/011a/011b/012a`、`IR-000a/007a/001a/002a/003a` 的实现契约已关闭，不再重做已出现的 registry/executor/envelope；`FND-004a` 的远端 fork 验收已通过，交付验收仅待 committed parent HEAD clean-clone。当前只启动并行的 `BE-001a`、`RT-002a`；`BE-001a + RT-002a + BuildPlan` 齐备后实现真实 `TC-001a`，其后才实现 `IR-004a/005a`、`RT-002b`、`BE-002a/004a`、`REL-001a`、`VERT-001` 和 `REL-002a`。只有这条纵切通过后，才进入控制流和广泛语法的 Phase 2B。
+`FE-008a/009a/010a/011a/011b/012a`、`IR-000a/007a/001a/002a/003a` 与 `FND-004a` 的实现及交付验收均已关闭，不再重做已出现的 registry/executor/envelope；当前可启动并行的 `BE-001a`、`RT-002a`，二者与 BuildPlan 齐备后实现真实 `TC-001a`，其后才实现 `IR-004a/005a`、`RT-002b`、`BE-002a/004a`、`REL-001a`、`VERT-001` 和 `REL-002a`。只有这条纵切通过后，才进入控制流和广泛语法的 Phase 2B。
 
 | 子任务 | 必须交付的关闭证据 |
 | --- | --- |
-| `FND-004a` | 现行关闭条件：lock/gitlink/checkout 固定同一 fork commit，reviewed upstream 是其祖先，doctor 与远端 fork fetch/full test/vet 通过，并在包含正确 `.gitmodules`/lock/gitlink/scripts 的 committed parent HEAD clean clone 重跑全量门禁。本地和远端 fork 门禁已通过；仅 committed parent clean clone 待执行。 |
+| `FND-004a` | 已关闭：lock/gitlink/checkout 固定同一 fork commit，reviewed upstream 是其祖先，doctor 与远端 fork fetch/full test/vet 通过，包含正确 `.gitmodules`/lock/gitlink/scripts 的 committed parent HEAD clean clone 也确认身份、clean worktree 与 doctor。 |
 | `FE-008a` | `frontendwire.ValidateProgramSnapshot` 成为 serialized validation 单一真源，`tsfrontend` 最终验证委托给它；原 overlay 反例必须作为 checked-in negative tests 通过，Kind/KindValue 漂移 fail closed。 |
 | `FE-009a` | 保留已实现的 free/instance/static/constructor ownership/redirect negative tests；让 checker-time AST analyzer 只产出 proof，由 wire 单一 validator 独立重算 effect closure、module binding 与 lowerer required facts；禁止复制 serialized effect helpers。 |
 | `FE-011a` | 对 source-level target independence、三项 TS options、validated FrontendSnapshot/BuildPlan binding、Windows/WSL path/profile/cache 运行全套 regression；跨盘符、UNC、POSIX rooted option/file/module/diagnostic path 在 wire 边界 fail closed。 |
@@ -218,7 +218,7 @@ ts2bin test --stage static-core
 首个里程碑是一个明确受限的 Linux x86-64 `add(number, number): number`，并且必须从序列化 snapshot 开始：
 
 1. `[complete] FE-008a/009a/010a/011a/011b`、`IR-000a`：lowering-complete snapshot、语义 proof、snapshot-only replay、truthful target/profile provenance 和唯一 pass contract 已冻结。
-2. `[acceptance-blocked] FND-004a`：`pqcqaq/typescript-go` fork remote、fork commit、reviewed upstream ancestor、parent gitlink/lock 和 fork verification/merge scripts 已落盘；本地 doctor、frontend/全仓回归、隔离 fork test/vet、replay 双构建和远端 fork fetch/full test/vet 已通过，committed parent HEAD clean-clone 是最后一项待执行证据。旧 patch/materialize/apply 机制不再是交付路径。
+2. `[complete] FND-004a`：`pqcqaq/typescript-go` fork remote、fork commit、reviewed upstream ancestor、parent gitlink/lock 和 fork verification/merge scripts 已落盘；本地 doctor、frontend/全仓回归、隔离 fork test/vet、replay 双构建、远端 fork fetch/full test/vet 和 committed parent HEAD clean-clone 均已通过。旧 patch/materialize/apply 机制不再是交付路径。
 3. `[complete] FE-012a, IR-007a/001a/002a/003a`：validated-input、number contract、HIR v2/compiler identity/logical requirements 与 number-only verifier 已冻结。下一步仅并行推进 `BE-001a`、`RT-002a`，建立 TargetMachine/DataLayout 与 Rust workspace/startup/manifests。
 4. `BE-001a + RT-002a + BuildPlan -> TC-001a`：resolver 只解析请求/manifests，产出 immutable TargetContext、authoritative DataLayout 和 AvailableCapabilityCatalog；`RepresentationPlan` 再首次 join verified HIR。只有之后 `IR-004a/005a` 才实现 target-aware MIR、BoundCapabilityClosure 与真正 verifier，随后由 `RT-002b`、`BE-002a/004a` 完成固定 C ABI、真实 LLVM、object 和 LLD 链接能力。
 5. `REL-001a`：只建立首切需要的隔离/超时 case-runner core，并精确记录 snapshot/HIR/MIR/LLVM/object/output provenance；完整 handbook/diagnostic runner 留给 `REL-001`。

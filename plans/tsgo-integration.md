@@ -20,7 +20,7 @@ typescript-go/
 
 版本和语义基线只以仓库根目录的 `ts2bin.lock.json` 为准，不在规格中复制手写版本号或 commit。当前锁定 checkout 是 `typescript-go 7.1.0-dev`，但版本字符串不能替代 Kind/API/stdlib/semantic compatibility baseline；每次升级都必须由 `FE-007` 生成差分。
 
-`FND-004` 的现行交付使用固定 fork commit：`.gitmodules` 与 lock 指向 `https://github.com/pqcqaq/typescript-go.git`，lock 记录 `forkRemote`、`forkCommit`、reviewed `upstreamCommit`、`pinned-fork-commit` 状态和 stdlib hash；parent gitlink、lock 与 checkout 必须等于同一个 fork commit，且 upstream commit 必须是 fork commit 的祖先。`doctor` 验证 remote、gitlink、clean worktree、ancestry 和 lock closure，`verify-typescript-go-fork.ps1` 从 fork remote 隔离 fetch 后执行 test/vet（本地未发布提交时使用 `-UseLocalCheckout`）。旧 upstream+patch/materialize/apply 机制已退役，不得作为 fallback。本地及远端 fork 迁移门禁已通过；仅 committed-parent clean-clone 待执行。
+`FND-004` 的现行交付使用固定 fork commit：`.gitmodules` 与 lock 指向 `https://github.com/pqcqaq/typescript-go.git`，lock 记录 `forkRemote`、`forkCommit`、reviewed `upstreamCommit`、`pinned-fork-commit` 状态和 stdlib hash；parent gitlink、lock 与 checkout 必须等于同一个 fork commit，且 upstream commit 必须是 fork commit 的祖先。`doctor` 验证 remote、gitlink、clean worktree、ancestry 和 lock closure，`verify-typescript-go-fork.ps1` 从 fork remote 隔离 fetch 后执行 test/vet（本地未发布提交时使用 `-UseLocalCheckout`）。旧 upstream+patch/materialize/apply 机制已退役，不得作为 fallback。本地、远端及 committed-parent clean-clone 迁移门禁均已通过。
 
 上游同步通过 `scripts/merge-typescript-go-upstream.ps1` 把 `upstream/main` 显式 merge 到 clean fork branch；禁止把 fork commit rebase 成无法审计的本地补丁栈。merge 后按顺序更新 lock 的 `upstreamCommit`/`forkCommit`，再运行 tsgo 全量测试、前端 snapshot golden、AST Kind 覆盖、标准库 manifest diff、Bingo conformance 和远端 fork verification。任何一步变化都要分类为“上游语义变化、适配器变化、预期新增能力或回归”。
 

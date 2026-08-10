@@ -38,7 +38,7 @@
 | 默认字符串 | UTF-16 code unit |
 | 默认方差 | 函数参数逆变、返回协变、可写位置不变 |
 
-当前 `ts2bin.lock.json` 已记录 snapshot schema 2、Bingo HIR schema 2、no-EH 默认值、`pqcqaq/typescript-go` fork remote、固定 fork commit 和 reviewed upstream ancestor；compatibility/snapshot/options baseline 的有意 UTF-8 wire 变化已审查并通过回归。Phase 1.5 实现契约以及 `FE-012a` 与 `IR-007a/001a/002a/003a` 已关闭；fork 迁移后的本地 doctor、frontend/全仓回归、隔离 test/vet、replay 双构建和远端 fetch/full test/vet 已通过，仅 committed-parent clean-clone 待执行。第一条纵切使用 `exceptions=none`；`ResolveBuildPlan` 对 `llvm-eh` 的早期拒绝只表示当前 no-EH lowering/schema 边界，不是工具链可用性探测。status/native-unwind 契约须在进入异常实现前单独冻结，其他 target/runtime availability 统一留给 `TC-001a`。
+当前 `ts2bin.lock.json` 已记录 snapshot schema 2、Bingo HIR schema 2、no-EH 默认值、`pqcqaq/typescript-go` fork remote、固定 fork commit 和 reviewed upstream ancestor；compatibility/snapshot/options baseline 的有意 UTF-8 wire 变化已审查并通过回归。Phase 1.5 实现契约以及 `FE-012a` 与 `IR-007a/001a/002a/003a` 已关闭；fork 迁移后的本地 doctor、frontend/全仓回归、隔离 test/vet、replay 双构建、远端 fetch/full test/vet 和 committed-parent clean-clone 已通过。第一条纵切使用 `exceptions=none`；`ResolveBuildPlan` 对 `llvm-eh` 的早期拒绝只表示当前 no-EH lowering/schema 边界，不是工具链可用性探测。status/native-unwind 契约须在进入异常实现前单独冻结，其他 target/runtime availability 统一留给 `TC-001a`。
 
 禁止以“tsgo parser 能解析”代替“Bingo 可以生成安全本机代码”。支持级别仍使用 S0/S1/S2/C/P/R。
 

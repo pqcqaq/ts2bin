@@ -57,14 +57,14 @@
 
 ### 工作项
 
-1. `FND-004`：现行交付已迁移到 `pqcqaq/typescript-go` 的固定 fork commit；lock 同时记录 fork remote、fork commit 和 reviewed upstream ancestor，parent gitlink/checkout 必须与 fork commit 一致。旧 patch/materialize/apply 机制已经退役；本地 doctor、隔离 fork smoke/full test/vet、frontend 九阶段、locked replay 双构建、远端 fork verification，以及 Go-LLVM 20.1.8 verifier 与 Rust staticlib + Clang/LLD 的 WSL smoke 已通过；仅 committed parent HEAD clean-clone 待执行。
+1. `FND-004`：现行交付已迁移到 `pqcqaq/typescript-go` 的固定 fork commit；lock 同时记录 fork remote、fork commit 和 reviewed upstream ancestor，parent gitlink/checkout 必须与 fork commit 一致。旧 patch/materialize/apply 机制已经退役；本地 doctor、隔离 fork smoke/full test/vet、frontend 九阶段、locked replay 双构建、远端 fork verification、committed parent HEAD clean-clone，以及 Go-LLVM 20.1.8 verifier 与 Rust staticlib + Clang/LLD 的 WSL smoke 已通过。
 2. `FE-008`：实现 snapshot schema v2 的 tagged `SyntaxPayload`、具名 child roles、source blob、literal/operator/name/property/import-export/class-init/type payload；checker capture panic/error 必须 fail closed，validator 重算 digest 并验证引用、parent/root 和 acyclic 不变量。
 3. `FE-009`：补齐 property read/write/optional/readonly/accessor/private identity、signature parameter optional/rest/effect、assertion chain/representation proof、non-null/flow proof kind、runtime capture 分类和 specifier-level type-only module edge。
 4. `FE-011`：修复大小写敏感路径 identity，完整捕获影响语义的 TS options，拆分 target-independent `FrontendSnapshot` 与 target-dependent `BuildPlan`，并验证 profile override/cache key。
 5. `FE-010`：在稳定的 frontend/build-plan 边界上建立首纵切 snapshot-only replay；释放 AST/checker 后，仅用序列化 snapshot 生成 `add(number, number)` 的 canonical HIR/lowering events，并以 readiness registry、manifest metadata 和 malformed negative cases 锁定边界。广泛 runner/fuzz 在 `REL-001/003` 收口。
 6. `IR-000`：收敛 source type plan、typed HIR、specialization fixed point、target representation、CFG/SSA 和 effect verifier 的唯一 DAG。
 
-当前状态按“代码存在”和“验收完成”分开记录。`FE-008/009/010/011` 的 wire 单一 validator、semantic proof、checker-free replay、target/path/profile/cache、no-EH 和 migration regression 已闭合；`IR-000` 的 executor/fixed-point/hooks/dumps 与 validate-snapshot -> typed-HIR production prefix 也已通过既有回归，Phase 1.5 实现契约已完成，但 pinned-fork 交付验收（`FND-004a`）仍为 `acceptance-blocked`。本地 doctor、隔离 fork verification、frontend 九阶段、replay 双构建和远端 fork verification 已通过；仅 committed parent clean-clone 待执行。当前审计进一步关闭 `FE-012a` 与 `IR-007a/001a/002a/003a`。typed envelope 的通用载体已实现，但真实 TargetContext/DataLayout/manifests resolver、target-aware MIR、LLVM/object/LLD 与 Node oracle 仍属于后续 Phase 2A。
+当前状态按“代码存在”和“验收完成”分开记录。`FE-008/009/010/011` 的 wire 单一 validator、semantic proof、checker-free replay、target/path/profile/cache、no-EH 和 migration regression 已闭合；`IR-000` 的 executor/fixed-point/hooks/dumps 与 validate-snapshot -> typed-HIR production prefix 也已通过既有回归。pinned-fork 交付验收（`FND-004a`）现已关闭：本地/远端 fork verification 与 committed parent clean-clone 均通过。当前审计进一步关闭 `FE-012a` 与 `IR-007a/001a/002a/003a`。typed envelope 的通用载体已实现，但真实 TargetContext/DataLayout/manifests resolver、target-aware MIR、LLVM/object/LLD 与 Node oracle 仍属于后续 Phase 2A。
 
 ### 退出门槛
 
@@ -77,13 +77,13 @@
 - `BaseURL`/`RootDirs`/`TypeRoots`/paths substitutions、source/module/diagnostic paths 中残留的盘符、UNC 或 POSIX rooted path 在 wire 边界 fail closed；同根外部路径只能以可搬迁的相对身份进入 hash。
 - Phase 2A 的 BuildPlan 使用明确的 no-EH mode；`BuildPlan` 只是 canonical unresolved request，必须先经 manifest 驱动的 `ResolveTargetContext`；未实现的 `llvm-eh` 不得作为默认或已支持 provenance。
 - IR schema ownership、pass/effect DAG、cache invalidation 和 provenance 已冻结并有 malformed/negative golden。
-- parent `.gitmodules`/gitlink/lock 固定同一可获取 fork commit；reviewed upstream commit 是其祖先；fork checkout clean；关闭条件包括 doctor、远端 fork fetch/full test/vet、WSL smoke 与 committed parent HEAD clean-clone。当前 fork 机制已迁移，本地 doctor/full test/vet、replay/frontend 门禁、远端 fork verification，以及 Go-LLVM 20.1.8 verifier 与 Rust staticlib + Clang/LLD 的 WSL smoke 已通过；仅 committed parent clean-clone 待执行。
+- parent `.gitmodules`/gitlink/lock 固定同一可获取 fork commit；reviewed upstream commit 是其祖先；fork checkout clean；关闭条件包括 doctor、远端 fork fetch/full test/vet、WSL smoke 与 committed parent HEAD clean-clone。当前 fork 机制已迁移，本地 doctor/full test/vet、replay/frontend 门禁、远端 fork verification、committed parent clean-clone，以及 Go-LLVM 20.1.8 verifier 与 Rust staticlib + Clang/LLD 的 WSL smoke 已通过。
 
 ## 阶段 2A：primitive 可执行纵切
 
 ### 目标
 
-只闭合 `add(number, number)` 的可验证、可执行链：validated serialized snapshot -> target-independent typed HIR；BuildPlan + manifests -> ResolveTargetContext；二者经 RepresentationPlan join -> target-aware MIR -> real LLVM -> object -> LLD -> process output -> Node oracle。Phase 1.5 实现契约已完成，但其 pinned-fork 交付验收（`FND-004a`）仍为 `acceptance-blocked`；纯 Go interpreter、伪 MIR 或文本 LLVM 只能提供局部反馈，不能替代本阶段的真实产物证据。
+只闭合 `add(number, number)` 的可验证、可执行链：validated serialized snapshot -> target-independent typed HIR；BuildPlan + manifests -> ResolveTargetContext；二者经 RepresentationPlan join -> target-aware MIR -> real LLVM -> object -> LLD -> process output -> Node oracle。Phase 1.5 实现契约与 pinned-fork 交付验收（`FND-004a`）均已完成；纯 Go interpreter、伪 MIR 或文本 LLVM 只能提供局部反馈，不能替代本阶段的真实产物证据。
 
 ### 工作项
 
