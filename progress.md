@@ -333,3 +333,11 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - `PrimitiveRepresentationBinding` 成为 boolean/number 到 `i1`/`f64` 的唯一映射入口；现有 number-only RepresentationPlan 仍生成原有单一 binding，Phase 2A artifact bytes 未被扩张。
 - alternative contract、非 canonical ABI byte 和 unsupported primitive representation 的 negative tests 已通过；HIR/MIR/backend/CLI 相关包 test/vet 回归全绿。
 - 下一纵切固定为 `choose(flag: boolean, left: number, right: number): number`，依次关闭 snapshot/HIR/CFG verifier、target-aware MIR/LLVM 与 uint8 ABI/Node differential。
+
+## 2026-08-11 Phase 2B IR-001b/002b/003b 完成
+
+- fork commit `16feebd2cc266ecbdcbdb8420e2023d3caae1e5d` 新增独立 `VerifyPhase2HIR`/canonical entry，旧 Phase 2A number-add verifier 未放宽。
+- validated serialized `choose(flag: boolean, left: number, right: number): number` snapshot 生成 boolean/number 参数、显式空 operation slices、三块 dense CFG、direct condbranch 和两条 number return；evaluation-order events 与 source origin/provenance 逐项复验。
+- verifier 覆盖 dense ValueID/BlockID、successor、reachability、dominance、condition/return type，并拒绝重算 hash 后的 parameter/condition/successor/return/event 篡改；source `if` child-role/type 篡改在产生 HIR 前 fail closed。
+- 修复 test-only snapshot clone 的嵌套 slice 浅拷贝，消除子测试共享 DTO 的顺序污染；定向、shuffle、race、相关 HIR/MIR/CLI 包 test/vet 与 `git diff --check` 通过。
+- 下一项固定为 `IR-004b/005b + BE-002b`：RepresentationPlan 同时绑定 boolean/i1 与 number/f64，生成并验证三块 target-aware MIR 和真实 LLVM conditional branch。

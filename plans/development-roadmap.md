@@ -125,6 +125,8 @@ export function add(a: number, b: number): number { return a + b; }
 4. 实现 `as`、`satisfies`、non-null、nullish/optional chain 和 logical assignment 的单次求值消糖。
 5. 扩展 HIR/MIR verifier 的 dominance、phi、短路、cleanup/effect 规则；实现保序常量折叠，不做跨函数激进优化。
 
+第一条控制流纵切当前状态：`IR-001b/002b/003b` 已关闭，`choose(flag, left, right)` 的 validated snapshot、boolean/number HIR、三块 CFG、canonical hash、source provenance、evaluation-order events 和 malformed verifier matrix 已通过。下一项为 `IR-004b/005b + BE-002b`，将相同 HIR 经 RepresentationPlan 降为 i1/f64 target-aware MIR 和真实 LLVM conditional branch。
+
 ### 验收门槛
 
 - `classify` 等控制流样例经同一 real-LLVM runner 与 Node oracle 一致。
