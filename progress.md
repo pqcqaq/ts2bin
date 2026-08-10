@@ -303,3 +303,11 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - final verified bound MIR 真实降为 LLVM `double @add(double,double)`、`fadd` 与 `nounwind`，明确禁用 fast-math；LLVM VerifyModule、ELF object emission、artifact tamper rejection 和重复 emission identity 均通过。
 - runtime source/ABI/target/manifest hashes 已同步 resolver fixture 与父仓库 lock；Windows 全仓 `go test -p=1 ./... -count=1`、`go vet ./...`、WSL LLVM 20 定向测试、Rust `cargo test --lib` 和重复 release build 通过。默认 Rust doctest 因当前 WSL 找不到 `rustdoc` 未执行，保留为环境项。
 - 下一顺序为 `BE-004a -> REL-001a -> VERT-001 -> REL-002a`；`VERT-001` 仍是第一个完整 snapshot-to-process Linux 可执行文件门槛。
+
+## 2026-08-10 BE-004a 完成
+
+- 新增独立 `internal/firstslicelink` 边界，只消费 final verified LLVM emission 与 strict runtime manifest；复验 archive/startup/harness 的 basename、大小和 SHA-256 后才允许链接。
+- linker response file 只含稳定 basename，固定 Linux x86-64、LLD、non-PIE、无 build-id、no-undefined、fatal-warnings 与 link map；临时工作目录不进入 artifact identity。
+- harness 启动时调用 `bingo_rt_abi_version_v1()`，保证 umbrella archive 不会被 LLD 当作未使用输入丢弃；link map 必须证明唯一 archive token 与 runtime ABI symbol。
+- WSL LLVM 20 下两次相同输入的 response/map/executable/content hash 完全一致，真实 executable 对 `1 + 2` 输出 `4008000000000000`；Windows contract tests、targeted test/vet 与 LLVM 五包回归通过。
+- 下一顺序为 `REL-001a -> VERT-001 -> REL-002a`。

@@ -46,6 +46,10 @@ int main(int argc, char **argv) {
         fputs("usage: add-harness <left-binary64-hex> <right-binary64-hex>\n", stderr);
         return 2;
     }
+    if (bingo_rt_abi_version_v1() != BINGO_RUNTIME_ABI_VERSION) {
+        fputs("bingo runtime ABI mismatch\n", stderr);
+        return 3;
+    }
     double result = add(double_from_bits(left_bits), double_from_bits(right_bits));
     printf("%016" PRIx64 "\n", double_to_bits(result));
     return 0;
