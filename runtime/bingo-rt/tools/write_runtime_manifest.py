@@ -50,7 +50,9 @@ def main():
     parser.add_argument("--startup", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args()
-    with (ROOT / "manifests" / "first-slice-target.json").open(encoding="utf-8") as stream:
+    target_manifest_path = ROOT / "manifests" / "first-slice-target.json"
+    abi_schema_path = ROOT / "schema" / "abi-v1.json"
+    with target_manifest_path.open(encoding="utf-8") as stream:
         manifest = json.load(stream)
     expected_archive = manifest.pop("umbrellaArchive")
     expected_startup = manifest.pop("startupObject")
@@ -67,6 +69,8 @@ def main():
         "umbrellaArchive": {"file": arguments.archive.name, "sha256": archive_hash, "bytes": arguments.archive.stat().st_size},
         "startupObject": {"file": arguments.startup.name, "sha256": startup_hash, "bytes": arguments.startup.stat().st_size},
     }
+    manifest["abiSchemaHash"] = sha256_file(abi_schema_path)
+    manifest["targetManifestHash"] = sha256_file(target_manifest_path)
     manifest["sourceHash"] = source_hash()
     manifest["toolchain"] = {
         "rustc": tool_version("rustc", "--version"),

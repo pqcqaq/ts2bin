@@ -28,7 +28,7 @@
   "runtime": {
     "workspace": "runtime/bingo-rt",
     "sourceHashAlgorithm": "sha256-path-nul-content-nul-v1",
-    "sourceSha256": "ef26929905eb5c621a28bd9e60c65511ecef48e32be74483d8f5c7fd910c4406",
+    "sourceSha256": "c6dde32fe7ba4905107d2d14d6926e685c71cbd258ec5da545802d98970b40fd",
     "abiSchema": "schema/abi-v1.json",
     "abiSchemaSha256": "e3a1ad216c254b183816607058e4f70a8764e03753fb34896f7167a124020a43",
     "targetManifest": "manifests/first-slice-target.json",
