@@ -21,7 +21,7 @@ ts2bin 将经过 TypeScript 类型检查的程序编译成可验证、可优化�
 
 ## 2. 仓库与集成边界
 
-`typescript-go` 的模块路径是 `github.com/microsoft/typescript-go`，AST/checker 位于 `internal/`，因此外部 sibling module 不能合法导入这些包。推荐结构如下：
+`pqcqaq/typescript-go` fork 保留模块路径 `github.com/microsoft/typescript-go`；AST/checker 位于 `internal/`，因此外部 sibling module 不能合法导入这些包。推荐结构如下：
 
 ```text
 typescript-go/                         # 维护中的薄 fork

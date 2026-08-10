@@ -126,24 +126,29 @@
 
 ## Phase 1.5 与调整后主链（2026-08-06）
 
-`IR-007a -> IR-001a -> IR-002a -> IR-003a`、`BE-001a` 和 `RT-002a` 按各自依赖并行推进；`BE-001a + RT-002a + BuildPlan -> TC-001a` 后才进入 target-aware `IR-004a/005a`。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request；resolver 产出 immutable `TargetContext`、LLVM TargetMachine 的权威 `DataLayout` 和 `AvailableCapabilityCatalog`，structural MIR 之后再由 capability binding 产出 `BoundCapabilityClosure`。Phase 2A 开工前必须先把 subset gate 的 validated-input 边界、HIR schema major 2/compiler build identity、logical capability requirement 和 typed multi-artifact resolver envelope 写入首切 schema；完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 real-LLVM 纵切反馈，MIR/backend 不得直接消费未解析 BuildPlan。
+`FE-012a` 与 `IR-007a -> IR-001a -> IR-002a -> IR-003a` 已关闭；下一步并行推进 `BE-001a` 和 `RT-002a`，二者与 BuildPlan 汇合到 `TC-001a` 后才进入 target-aware `IR-004a/005a`。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request；resolver 只语义消费 BuildPlan/toolchain/runtime manifests，产出 immutable `TargetContext`、LLVM TargetMachine 的权威 `DataLayout` 和 `AvailableCapabilityCatalog`。typed envelope 原样保留 HIR，首次 HIR/target provenance join 发生在 `RepresentationPlan`；structural MIR 之后再由 capability binding 产出 `BoundCapabilityClosure`。完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 real-LLVM 纵切反馈，MIR/backend 不得直接消费未解析 BuildPlan。
 
 | ID | 当前状态 | 结果/退出条件 |
 | --- | --- | --- |
-| Direction audit | complete | 保留总体架构；结论为方向正确、Phase 1.5 已完成、Phase 2A 可启动；阻断证据和调整后的依赖已写入审计报告/backlog |
+| Direction audit | complete | 保留总体架构；Phase 1.5 实现契约已完成、Phase 2A 可启动；当前 pinned-fork 交付迁移已落盘但 FND-004 验收待执行，阻断证据和调整后的依赖已写入审计报告/backlog |
 | CLI/profile fix | complete | 未显式 override 时保留完整 `bingoOptions`；显式 `--profile` 只改变 profile；定向测试通过 |
 | Assertion proof bridge | complete | assertion chain、non-null、representation/flow proof 已进入 snapshot，并由 wire 独立重算、corruption negative 和 round-trip regression 闭合 |
-| `FND-004` | complete | `b2dca40` 的 gitlink/lock/patch/scripts 已在 parent HEAD；doctor、clean-clone 全阶段回归、全仓 test/vet 和 official remote isolated full verification 通过 |
+| `FND-004` | acceptance-blocked | 现行 submodule/lock 已迁移到 `pqcqaq/typescript-go` 的固定 fork commit，并以 reviewed upstream ancestor + fork commit 作为 compiler identity；旧 patch/materialize/apply 机制已退役。本地 doctor、frontend 九阶段、隔离 fork smoke/full test/vet、locked replay 双构建与远端 fork fetch/full test/vet 已通过；仅提交后 parent clean-clone 待执行 |
 | `FE-008` | complete | Kind-driven payload/role/arity registry、单一 `frontendwire` serialized validator、rooted-path fail-closed 门禁与原 overlay 负例已实现；核心、race、shuffle/repeat、全仓 regression 通过 |
 | `FE-009` | complete | per-specifier binding、callee effect closure、exhaustive registry、lowerer facts、ownership/redirect 负例和 wire round-trip 已实现；serialized validator 双写已移除，核心与全仓 regression 通过 |
 | `FE-010` | complete | checker-free dependency closure、独立进程重复输出、显式 evaluation-order/single-block HIR 与 tamper post-verifier 已通过；migration baseline/golden regression 已闭合 |
 | `FE-011` | complete | source-level target split、三项 TS options、Windows/WSL identity、跨盘/UNC/POSIX rooted path fail-closed、profile/cache regression 和 validated FrontendSnapshot binding 已通过 |
 | `FE-011b` | complete | canonical `exceptions=none` 已迁移 default options、lock、BuildPlan 与 golden；`llvm-eh` 只保留为未来 capability 并 fail closed，status-code/native-unwind 后续独立锁定 |
 | `IR-000` | complete | executor/fixed-point/budget/pre-post/effect/dump golden 与 validate-snapshot -> typed-HIR production prefix 已通过核心、race、frontend stage 和全仓 regression；typed HIR 之后的 TargetContext/handlers 与真正 MIR verifier属于 Phase 2A |
-| `FE-012a` | ready | 在 Phase 2A 首切前拆分 capture-core validation 与 diagnostic sealing，使 subset gate/lowering 只能消费 validated snapshot/envelope |
-| Phase 2A: `IR-007a`, `IR-001a..005a`, `BE-001a`, `RT-002a`, `TC-001a`, `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | ready | 先关闭 validated-input/schema/compiler-identity/capability/envelope 契约，再按 `IR-007a -> IR-001a -> IR-002a -> IR-003a`、`BE-001a`、`RT-002a` 并行；`BE-001a + RT-002a + BuildPlan -> TC-001a` 后再实现 target-aware number/参数/加法/单 block return HIR/MIR/verifier、固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential |
+| `FE-012a` | complete | `Frontend.Build` 返回 canonical 深拷贝 sealed snapshot；返回 diagnostics 与 snapshot 脱离；公共 subset gate 自行完整验证，production replay 对 in-memory/serialized/frontend-wrapper 的重哈希 flags/modifiers/type-closure 篡改全部 fail closed |
+| `IR-007a` | complete | number contract v1 固定 binary64、canonical qNaN、保留 `-0`、RNE/no-fast-math `+`、`extern "C" double add(double,double)` 与 ABI bits observation；alternative contract fail closed |
+| `IR-001a/002a/003a` | complete | HIR major 2、完整 `CompilerBuildIdentity`、identity-free source plan、logical requirements、number-only canonical lowering 与 schema/ID/type/effect/origin/terminator/provenance/capability/CFG negative tests已闭合；lock 的 `bingoIR` 已升为 2 |
+| Typed artifact envelope substrate | complete | `PassArtifactEnvelope` 已提供 role/schema/payload-bound canonical digest、immutability 与 executor transition checks；resolver 不把 HIR误列为语义输入，RepresentationPlan 才声明首次 join；这只是 `TC-001a` 基础设施 |
+| `BE-001a`, `RT-002a` | ready | 并行建立真实 Go-LLVM TargetMachine/DataLayout 与 Rust empty startup/toolchain-runtime manifests；不得以 fixture envelope 冒充完成 |
+| `TC-001a`, `IR-004a/005a` | blocked | 等待 `BE-001a + RT-002a` 的真实 manifests/DataLayout；随后实现 resolver、RepresentationPlan join、target-aware MIR provenance/verifier 与 BoundCapabilityClosure |
+| `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | blocked | 等待 verified target-aware MIR，再完成固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential |
 | Phase 2B: primitive control flow | blocked | Phase 2A 通过后再扩 bool、变量、调用、CFG、string/null/undefined 和单次求值消糖 |
 | `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |
 | Broad Phase 2+ | blocked | 第一真实纵切通过后再扩对象/runtime/modules/generics/EH/async/第二目标 |
 
-当前验证备注：`go list -deps ./cmd/ts2bin-replay` 已证明 production replay 不携带 parser/checker/AST；核心六包、race/vet、frontend 九阶段、全仓回归、clean clone 和 official remote isolated patch verifier 均通过。二次审计新增了 validated-input、HIR schema/compiler identity、logical capability、typed resolver envelope 四项 Phase 2A 入口契约；当前 patch SHA-256 由 lock 固定。不要重复开发已存在的 registry/executor，也不要在首切 real-LLVM 纵切通过前进入 Phase 2B。
+当前验证备注：`go list -deps ./cmd/ts2bin-replay` 已证明 production replay 不携带 parser/checker/AST；现行交付已迁移为 `pqcqaq/typescript-go` 固定 fork commit，旧 patch/materialize/apply 机制不再是活跃路径。doctor、frontend 九阶段、核心/全仓 test/vet、locked replay 双构建、本地和远端隔离 fork verification 已通过；仅提交后 current committed HEAD clean-clone 待执行。不要重复开发已存在的 registry/executor/envelope，也不要在首切 real-LLVM 纵切通过前进入 Phase 2B。

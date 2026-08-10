@@ -3,10 +3,10 @@
 ## 环境
 
 - 工作目录：`D:\Develop\git\ts2bin`。
-- 当前父仓库位于 `codex/phase15-exit`，HEAD 为 `b2dca40efb3ab730c58af2b9c052a31da406574a`（`fix(project): resolve phase 1.5 audit gaps`）。
+- 当前父仓库位于 `codex/phase15-exit`；本轮审计起点 HEAD 为 `92dae0718bf24f4b819010f3ca8c3e666e6dca60`（`docs(project): close phase 1.5 audit`），Phase 2A 入口复审改动尚在工作树等待最终门禁与提交。
 - Node.js：`v22.22.0`；Go：`1.26.0`；Rust：`1.97.1`。
 - npm registry 当前 TypeScript 稳定版：`7.0.2`（查询日期：2026-08-03）。
-- `typescript-go/` 已作为 Git submodule 纳入父仓库；当前 parent gitlink 指向上游 `12318e599d21f516defea3b20e5d44b9369da723`，内部版本为 `7.1.0-dev`。二次审计后的 binary patch、lock、doctor materialized-exact、parent HEAD clean-clone 全阶段回归和 official remote isolated full test/vet/cleanup 均通过，`FND-004` 已关闭。
+- `typescript-go/` 已作为 Git submodule 纳入父仓库；现行 submodule remote 为 `https://github.com/pqcqaq/typescript-go.git`，工作树 gitlink/lock 固定 fork commit `a7659cfb06a62321c7f5ca304b01fb3d661876b3`，并记录 reviewed upstream ancestor `86cc4767d4ebadb9b7845d0ab8eb2b05785c3fee`，内部版本为 `7.1.0-dev`。fork 交付机制已迁移到 `pinned-fork-commit`；本地 doctor、frontend 九阶段、隔离 smoke/full test/vet、locked replay 双构建及远端 fork fetch/full test/vet 均已通过。`FND-004` 仅待 committed parent HEAD clean-clone 验收。
 - 直接执行 `npx tsc` 会命中 npm 上名为 `tsc` 的占位包，校验应使用 `npx -p typescript@latest tsc` 或项目本地依赖。
 
 ## 官方资料
@@ -63,8 +63,8 @@
 - 解析入口为 `internal/parser.ParseSourceFile`；程序入口通过 `internal/compiler.NewProgram`，类型检查器通过 `internal/checker.NewChecker`。
 - AST 主要由 `internal/ast/ast.go` 与生成文件 `ast_generated.go`/`kind_generated.go` 定义；不能假设它与 TypeScript npm 编译器的对象布局相同，应通过稳定的适配层访问。
 - `typescript-go` 内置 transformer/emitter 主要服务 TypeScript 的 JavaScript 发射，不应直接作为 Bingo IR；需要独立的语义 lowering，避免把 JS emitter 的运行时假设泄漏到 Bingo。
-- `typescript-go/go.mod` 的模块路径是 `github.com/microsoft/typescript-go`，且 README 明确标注公开 API “not ready”；独立 sibling module 无法合法导入其 `internal/*`。
-- 推荐集成方式是维护一个薄 fork：将 `cmd/ts2bin`、`internal/bingo` 和 `internal/ast2bingo` 放在该模块内部；尽量不修改 parser/checker 核心，并以小型适配层隔离上游变动。
+- `pqcqaq/typescript-go/go.mod` 保留模块路径 `github.com/microsoft/typescript-go`，且 README 明确标注公开 API “not ready”；独立 sibling module 无法合法导入其 `internal/*`。
+- 当前集成方式是维护 `pqcqaq/typescript-go` 薄 fork：将 `cmd/ts2bin`、`internal/bingo` 和 `internal/ast2bingo` 放在该模块内部；尽量不修改 parser/checker 核心，并以小型适配层隔离上游变动。上游变化通过显式 merge 纳入 fork，不能回退到官方 checkout 加本地补丁。
 - `cmd/tsgo api` 当前是内部 JSON-RPC/MessagePack 服务，但公开状态仍未就绪，且现有协议主要面向编译/语言服务，不足以稳定输出完整 typed AST；不宜把它作为第一版后端接口。
 - checker 已提供大量包内可调用的语义查询：`GetTypeAtLocation`、`GetSymbolAtLocation`、`GetResolvedSignature`、`GetTypeOfSymbol`、`GetPropertiesOfType`、`GetBaseTypes`、`GetTypeArguments`、`IsTypeAssignableTo` 等，可支持 typed lowering。
 - AST `Kind` 覆盖完整 JS/TS token、type node、expression、statement、declaration 和 JSX/JSDoc 节点；支持矩阵可以以 `kind_generated.go` 为审计基线。
@@ -92,6 +92,11 @@
 - 文档执行层需要独立于架构叙述：采用 `FND/FE/IR/OBJ/MOD/RT/ADV/BE/REL` 稳定 issue ID，每个 issue 绑定矩阵行、AST Kind、artifact、诊断和验收命令。
 - 第一条实现纵切应保持最小语义面，但不能绕过真实边界：`add(number, number)` 仍需经过 Program/checker release、validated snapshot、target-independent HIR、BuildPlan/TargetContext 到 RepresentationPlan 的 join、MIR verifier、LLVM verifier/link 和 Node differential。
 - Phase 2A 入口审计发现四项必须先冻结的契约：HIR schema major 2 与 `CompilerBuildIdentity`、logical capability requirement、validated subset-gate input，以及替代 `PassState.Facts []string` 的 typed multi-artifact resolver envelope；它们不改变总体架构，但未关闭前不能生成可信 target-aware MIR。
+- Phase 2A 入口复审已关闭 `FE-012a` 与 `IR-007a/001a/002a/003a`：sealed snapshot、checker-free subset replay、number contract、HIR v2/compiler identity/logical requirements 和 verifier negative matrix 均有直接测试；`ts2bin.lock.json.schemas.bingoIR` 已升为 2。
+- `source-type-plan-v1` 必须保持 compiler-identity-free；compiler identity 是 driver/build 输入，只在 typed-HIR lowering 时加入 provenance。不同 fork commit identity 必须改变 HIR/replay hash，锁定 replay 构建必须通过 `-ldflags -X` 注入 upstream/fork commits，未配置二进制 fail closed。
+- typed `PassArtifactEnvelope` 解决 artifact role/schema/payload identity 与不可变传递，但不是 TargetContext resolver。`ResolveTargetContext` 只语义消费 BuildPlan/toolchain/runtime manifests；HIR 虽由 envelope 保留，首次 HIR/target provenance join 必须发生在 RepresentationPlan。
+- MIR v1 继续保留原通用 structural verifier 语义；HIR v2 的 number-only 限制不得反向收紧 MIR v1。真正的 MIR provenance、RepType/DataLayout、module-level ID 与 capability closure 属于 `IR-004a/005a`，必须等待 `BE-001a + RT-002a + TC-001a`。
+- 当前开发优先级是并行 `BE-001a` 与 `RT-002a`，随后才是 `TC-001a -> IR-004a/005a`；在真实 LLVM DataLayout 和 runtime/toolchain manifests 之前，不得把 fixture envelope 标为 `TC-001a complete`。
 - 规格冲突优先级固定为：IR verifier 高于架构叙述，capability manifest 高于 `.d.ts` 可见性，锁定 snapshot schema 高于 tsgo 私有对象布局。
 - 可维护性规范采用“抽象必须证明价值”：核心流程优先保持线性；只有语义单元、稳定不变量、真实复用或外部边界才允许抽取，禁止一行 wrapper、预判式接口和无归属 `utils/helpers`。
 - Program/checker、snapshot、HIR/MIR pass、variance/dynamic、runtime/GC/EH 和 LLVM mapping 属于强制核心注释区域；所有导出 API、配置、诊断、IR 节点和 runtime ABI 必须有契约型文档注释。

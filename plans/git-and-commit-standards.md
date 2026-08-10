@@ -2,14 +2,14 @@
 
 本文规定父仓库、typescript-go submodule、Rust runtime、分支、提交、变更集和发布标签的使用方式。目标是让每个提交可审查、可回滚、可二分，并能准确还原 tsgo、标准库、Bingo schema、Rust runtime、runtime ABI 和 LLVM 版本组合。
 
-当前父仓库刚初始化，尚无历史提交可供模仿；在首个提交建立后，后续提交必须先检查历史风格，再遵循本文件和仓库已有约定。typescript-go 是独立上游仓库，不在父仓库内直接提交其源码修改。
+当前父仓库刚初始化，尚无历史提交可供模仿；在首个提交建立后，后续提交必须先检查历史风格，再遵循本文件和仓库已有约定。`typescript-go` 是独立 fork 仓库，不在父仓库内直接提交其源码修改；上游变化通过 fork 内的显式 merge 纳入。
 
 ## 1. 仓库关系
 
 ~~~text
 ts2bin (parent repository)
   .gitmodules
-  typescript-go -> github.com/microsoft/typescript-go.git (gitlink)
+  typescript-go -> github.com/pqcqaq/typescript-go.git (gitlink)
   handbook/
   plans/
   task_plan.md / findings.md / progress.md
@@ -18,7 +18,7 @@ ts2bin (parent repository)
 规则：
 
 - 父仓库提交的是 typescript-go 的 gitlink SHA，不提交其文件内容。
-- tsgo 源码修改必须在独立 fork/分支中完成；父仓库只更新 submodule 指针，并在提交正文记录上游 SHA、原因和兼容性结果。
+- tsgo 源码修改必须在 `pqcqaq/typescript-go` fork 的独立分支中完成；父仓库只更新 submodule 指针，并在提交正文记录 fork SHA、reviewed upstream SHA、原因和兼容性结果。
 - 更新 submodule 前必须确认子仓库工作树干净；禁止用 git add -f 把子仓库文件提升到父仓库。
 - git submodule status、git diff --submodule=log 和子仓库 git status 是 submodule 变更的必查证据。
 - 构建和发布必须使用 lock 文件、submodule SHA 和 stdlib manifest hash，不能依赖开发机当前 checkout 的模糊分支。
@@ -143,24 +143,24 @@ ts2bin test --stage <affected-stage>
 
 ## 5. Submodule 更新流程
 
-### 5.1 只更新到上游已有提交
+### 5.1 合并上游提交到 fork
 
-~~~text
-git -C typescript-go fetch origin
-git -C typescript-go checkout <reviewed-commit>
+~~~powershell
+.\scripts\merge-typescript-go-upstream.ps1
 git -C typescript-go status --short --branch
 git submodule status
 git diff --submodule=log
 ~~~
 
-然后运行 [compiler-development-process.md](compiler-development-process.md) 的上游升级审计，更新 ts2bin.lock.json、stdlib manifest 和相关 snapshot/conformance 报告，再在父仓库提交 gitlink。
+合并必须发生在 clean fork branch，保留可审计的 upstream merge ancestry。解决冲突并提交 fork 后，运行 [compiler-development-process.md](compiler-development-process.md) 的上游升级审计，更新 `ts2bin.lock.json` 的 reviewed upstream/fork commits、stdlib manifest 和相关 snapshot/conformance 报告；`verify-typescript-go-fork.ps1` 通过后再在父仓库提交 gitlink。
 
 ### 5.2 需要修改 tsgo 源码
 
-1. 在 tsgo 独立 fork/分支记录修改和上游 issue。
+1. 在 `pqcqaq/typescript-go` fork 分支记录修改和上游 issue。
 2. 先运行 tsgo 自身测试和 API/Kind/snapshot 兼容性检查。
-3. 父仓库只引用该 fork 的明确 commit，并在提交正文写明 patch 范围。
+3. 父仓库只引用该 fork 的明确 commit，并在提交正文写明 fork 变更范围与 reviewed upstream ancestor。
 4. 禁止直接在父仓库 submodule 目录内留下未提交改动作为“本地依赖”。
+5. 禁止恢复已退役的 patch/materialize/apply 交付路径；需要修改时必须先形成可获取的 fork commit。
 
 ### 5.3 回滚 submodule
 

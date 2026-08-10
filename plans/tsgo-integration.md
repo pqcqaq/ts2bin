@@ -4,7 +4,7 @@
 
 ## 1. 版本和目录策略
 
-第一版采用薄 fork，保留模块路径 `github.com/microsoft/typescript-go`：
+第一版采用 `https://github.com/pqcqaq/typescript-go.git` 薄 fork，并保留 Go 模块路径 `github.com/microsoft/typescript-go`：
 
 ```text
 typescript-go/
@@ -20,9 +20,9 @@ typescript-go/
 
 版本和语义基线只以仓库根目录的 `ts2bin.lock.json` 为准，不在规格中复制手写版本号或 commit。当前锁定 checkout 是 `typescript-go 7.1.0-dev`，但版本字符串不能替代 Kind/API/stdlib/semantic compatibility baseline；每次升级都必须由 `FE-007` 生成差分。
 
-`FND-004` 当前采用可复现 patch 交付：lock 记录 `upstreamCommit`、官方 remote、patch path/base/SHA-256 和 stdlib hash，doctor 重建工作树 binary diff 并要求与 patch hash 完全一致，验证脚本从 remote shallow-fetch 锁定 commit 后 apply/test/vet。`b2dca40` 已包含正确 gitlink、lock、patch 和脚本；parent HEAD clean-clone、official remote full test/vet/cleanup 与 WSL smoke 均通过，FND-004 已关闭。后续若迁移到 fork commit，再同时锁定可获取的 fork remote/commit，不能退回官方 submodule 加未记录 dirty state。
+`FND-004` 的现行交付使用固定 fork commit：`.gitmodules` 与 lock 指向 `https://github.com/pqcqaq/typescript-go.git`，lock 记录 `forkRemote`、`forkCommit`、reviewed `upstreamCommit`、`pinned-fork-commit` 状态和 stdlib hash；parent gitlink、lock 与 checkout 必须等于同一个 fork commit，且 upstream commit 必须是 fork commit 的祖先。`doctor` 验证 remote、gitlink、clean worktree、ancestry 和 lock closure，`verify-typescript-go-fork.ps1` 从 fork remote 隔离 fetch 后执行 test/vet（本地未发布提交时使用 `-UseLocalCheckout`）。旧 upstream+patch/materialize/apply 机制已退役，不得作为 fallback。本地及远端 fork 迁移门禁已通过；仅 committed-parent clean-clone 待执行。
 
-上游同步时按顺序运行：tsgo 全量测试、前端 snapshot golden、AST Kind 覆盖、标准库 manifest diff、Bingo conformance。任何一步变化都要分类为“上游语义变化、适配器变化、预期新增能力或回归”。
+上游同步通过 `scripts/merge-typescript-go-upstream.ps1` 把 `upstream/main` 显式 merge 到 clean fork branch；禁止把 fork commit rebase 成无法审计的本地补丁栈。merge 后按顺序更新 lock 的 `upstreamCommit`/`forkCommit`，再运行 tsgo 全量测试、前端 snapshot golden、AST Kind 覆盖、标准库 manifest diff、Bingo conformance 和远端 fork verification。任何一步变化都要分类为“上游语义变化、适配器变化、预期新增能力或回归”。
 
 ## 2. Program 构造链
 
@@ -140,7 +140,7 @@ type BuildPlan struct {
 
 `FrontendSnapshot.ContentHash` 只受 source、会改变前端语义的 tsconfig、source profile、锁定 tsgo/stdlib 和 snapshot schema 影响。target triple、CPU/features、runtime、GC、EH、bounds、emit 等进入 `BuildPlan`；`BuildPlan` 只冻结规范化请求及其 hash，不包含已解析 capability、data layout 或已选择 archive。即使内部 API 名为 `ResolveBuildPlan`，这里的 resolve 也只表示默认值解析和 canonicalization。
 
-Phase 2A 必须在 `RepresentationPlan`/MIR 前执行 `ResolveTargetContext(BuildPlan, toolchain manifest, runtime manifest)`。只有该步骤可以证明 target/CPU/features、LLVM major、ABI/layout、GC/EH profile 和 runtime 实现可用；完整 artifact cache key 组合 frontend hash、build-plan hash、`TargetContext` hash、runtime/ABI/layout hashes 与 `CompilerBuildIdentity`（upstream commit、patch base/SHA-256、lowering schema）。
+Phase 2A 必须在 `RepresentationPlan`/MIR 前执行 `ResolveTargetContext(BuildPlan, toolchain manifest, runtime manifest)`。只有该步骤可以证明 target/CPU/features、LLVM major、ABI/layout、GC/EH profile 和 runtime 实现可用；完整 artifact cache key 组合 frontend hash、build-plan hash、`TargetContext` hash、runtime/ABI/layout hashes 与 `CompilerBuildIdentity`（upstream commit、fork commit、lowering schema/hash）。
 
 具体 facade 方法仅在实现包内部使用：
 

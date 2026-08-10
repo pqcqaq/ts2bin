@@ -1,6 +1,6 @@
 # TypeScript 语法与语义支持矩阵
 
-本矩阵以 `ts2bin.lock.json` 锁定的 `typescript-go` checkout、`internal/ast/kind_generated.go`、stdlib hash 和 `FE-007` semantic baseline 为唯一审计基线。2026-08-05 的实际锁是 `typescript-go 7.1.0-dev` / `12318e599d21f516defea3b20e5d44b9369da723`；版本字符串本身不证明某项语言能力，支持结论仍以 fixture、snapshot proof 和 lowering/runtime 门禁为准。它把“语法能被 parser 接受”和“ts2bin 能安全生成本机代码”严格分开。
+本矩阵以 `ts2bin.lock.json` 锁定的 `typescript-go` checkout、`internal/ast/kind_generated.go`、stdlib hash 和 `FE-007` semantic baseline 为唯一审计基线。当前（2026-08-06）工作树锁定的是 `typescript-go 7.1.0-dev` / fork commit `a7659cfb06a62321c7f5ca304b01fb3d661876b3`；远端可获取性由 `FND-004a` 单独验收。版本字符串本身不证明某项语言能力，支持结论仍以 fixture、snapshot proof 和 lowering/runtime 门禁为准。它把“语法能被 parser 接受”和“ts2bin 能安全生成本机代码”严格分开。
 
 本表中引用 TypeScript 4.x-6.x 的行是功能出现版本或历史语义说明，不是当前编译器锁。升级 tsgo 时不得手工改一个“TS 语义版本”字符串后继续使用旧结论；必须重新生成 Kind/API/stdlib/semantic diff，并逐行审计受影响的 S0/S1/S2/C/P/R 决策。
 

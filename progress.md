@@ -126,10 +126,10 @@
 - 新增/修改文件已加入父仓库暂存区；未创建提交，`typescript-go` submodule 工作树保持干净。
 - 本轮工程规范阶段 I–L 全部完成。
 
-## 2026-08-04 Git 初始化与分批提交
+## 2026-08-04 Git 初始化与分批提交（历史记录）
 
 - 已将父目录初始化为 Git `main` 分支，并把现有 `typescript-go` 规范化为 submodule/gitlink。
-- submodule 远程为 `https://github.com/microsoft/typescript-go.git`，固定提交 `5b1047d10d32e7d5b446be4de56b126ff42f82bb`。
+- `[历史]` submodule 远程曾为 `https://github.com/microsoft/typescript-go.git`，固定提交 `5b1047d10d32e7d5b446be4de56b126ff42f82bb`；现行交付已迁移到 `pqcqaq/typescript-go` pinned fork commit。
 - 初始提交前按 `git diff --cached --check` 机械清理 53 个既有文件的额外 EOF 空行；未改正文语义。
 - 第 1 批 `763f330 chore(repo): initialize repository and pin typescript-go`：仓库、ignore、submodule 基线。
 - 第 2 批 `f030162 docs(handbook): add TypeScript and ECMAScript reference`：完整 handbook、示例、标准库索引和生成器。
@@ -191,7 +191,7 @@ git status --short
 
 关键结果：targeted race 通过；全仓 shuffle 通过；`internal/tsfrontend` 与 `cmd/ts2bin` 连续 20 次通过；frontend stage 报告 `ok: true`；compatibility 报告 `compatible: true` 且 checkout expected/observed commit 闭合；doctor 的 Windows、WSL 和 revision closure 检查全部通过。该结论的准确表述是：Phase 1 原验收项 complete，lowering readiness 未审计。
 
-## 2026-08-05 开发方向与 lowering-readiness 审计（历史检查点）
+## 2026-08-05 开发方向与 lowering-readiness 审计（历史检查点；旧 patch 机制已退役）
 
 - 总体架构继续采用 `typescript-go -> immutable snapshot -> Bingo HIR/MIR -> LLVM -> Rust C ABI staticlib + LLD`；不改成 AST 直发 LLVM，也不引入完整 JS engine 作为 static profile 基础。
 - 阶段结论调整为 `rework before Phase 2`：Phase 1 通过原门禁，但不能据此启动广泛 `IR-001`/HIR 语法开发。
@@ -203,14 +203,14 @@ git status --short
 - assertion proof 曾产生 3 个预期 semantic digest 差异；现已完成 schema v2 迁移、人工分类与 baseline 更新，`go test ./internal/tsfrontend -count=1` 通过。这只证明当前 baseline 一致，不代表 Phase 1.5 已闭合。
 - 完整结论、证据和调整后的依赖链见 `plans/development-audit-2026-08-05.md` 与 `plans/implementation-backlog.md`。
 
-## 2026-08-05 Phase 1.5 收口与计划重排（历史检查点，已被二次审计取代）
+## 2026-08-05 Phase 1.5 收口与计划重排（历史检查点；旧 patch 机制已退役）
 
 - `FE-008` 实现进展：snapshot schema v2、tagged payload、source blob、named children、通用图/hash validator 和 fail-closed capture 已落地。反向审计仍发现 validator 接受 NumericLiteral 空 Text 与 BinaryExpression 全 generic `child[n]` roles，因此状态回调为 partial，下一步补 Kind shape registry。
 - `FE-009` 实现进展：property/parameter/signature/effect、assertion/non-null/flow/capture/module facts 已进入 snapshot semantic hash。仍缺 per-specifier module binding、checker/callee-derived effect proof 与按 Kind/lowerer mandatory-fact validation，因此状态为 partial。
 - `FE-010` 实现进展：真实序列化 `add(number, number)` replay、11-Kind readiness registry、多 return/未绑定 Kind/非 number/坏 symbol/type 拒绝已通过。consumer 仍位于 `internal/tsfrontend`，events 仍按 source position，尚无独立新进程/CFG evaluation-order 证明，因此仅为 primitive prototype。
 - `FE-011` 实现进展：`FrontendSnapshot` wrapper 与 BuildPlan provenance split、投影后 hash、case-sensitive path/profile tests 已落地。raw ProgramSnapshot 仍随 target/CPU/emit 变化，BuildPlan 接受任意格式正确 digest，且遗漏三个 TS options，因此状态为 partial。
 - compatibility 夹具读取器和 semantic digest domain 已迁移到 schema v2；执行 `go run ./cmd/ts2bin compatibility --update-baseline` 后，`go test ./internal/tsfrontend -count=1` 通过。
-- `FND-004` 实现进展：已生成 patch，lock 固定 upstream/base/path/SHA-256，doctor 报告 `materialized-exact`；一次隔离 remote apply/test/vet 通过，最新 shallow smoke/long-path cleanup 也 exit 0。但 parent HEAD 的 gitlink 仍是旧 commit，lock/scripts/patch 未进入 parent HEAD，因此 acceptance blocked。
+- `[历史，已退役机制]` `FND-004` 当时已生成 patch，lock 固定 upstream/base/path/SHA-256，doctor 报告 `materialized-exact`；一次隔离 remote apply/test/vet 通过，最新 shallow smoke/long-path cleanup 也 exit 0。但 parent HEAD 的 gitlink 仍是旧 commit，lock/scripts/patch 未进入 parent HEAD，因此 acceptance blocked。
 - `IR-000` 审计结论为 metadata skeleton：已有不可变 13-stage pass metadata/sequence contract 与初步 HIR verifier；overlay 仍证明无返回自循环、非法 store/phi/sparse ID 和 MIR duplicate FunctionID 可被接受。
 - 后续顺序调整为：FND clean-parent delivery -> FE Kind shape registry -> mandatory semantic facts/per-specifier/effect proof -> source-level target split/typed BuildPlan -> 独立 checker-free CFG replay -> pass executor -> primitive IR chain（含 HIR/MIR verifier closure） -> empty runtime/startup -> real LLVM/object/link -> case runner -> `VERT-001` -> Node differential。对象、GC、EH、async、模块和广泛语法继续延后。
 
@@ -227,7 +227,7 @@ go run ./cmd/ts2bin compatibility --update-baseline
 .\scripts\doctor.ps1 -Quiet
 ```
 
-## 2026-08-05 二次方向审计与阶段拆分（历史检查点）
+## 2026-08-05 二次方向审计与阶段拆分（历史检查点；旧 patch 机制已退役）
 
 - 总体架构再次确认正确：`typescript-go checker -> immutable frontend snapshot -> typed HIR -> target-aware MIR -> LLVM/object -> Rust C ABI runtime + LLD`。不采用 AST 直发 LLVM，也不以完整 JS engine 作为 static profile 基础。
 - 状态语义改为 `implemented`、`prototype`、`acceptance-blocked`、`complete`。`FE-008/009/011` 与 `IR-000` 已有实质生产实现，不再列为“缺失”；当前统一标记 `implemented / acceptance-blocked`。
@@ -235,20 +235,20 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - `FE-010` 已拆成 `internal/frontendwire`、`internal/ast2bingo` 和 `cmd/ts2bin-replay`。`go list -deps ./cmd/ts2bin-replay` 不再包含 parser、binder、checker、AST 或 tsoptions，说明独立进程依赖方向正确。
 - 初次联合测试暴露的 `KindImportType`/`KindTypeLiteral` wire effect 分类已修复；随后 `internal/ast2bingo`、`cmd/ts2bin-replay`、FE effect/shape/BuildPlan 定向测试和 `internal/bingo` 均通过。全量 frontend compatibility baseline、snapshot fixture 与 default-options golden 仍因 DTO/hash 变化漂移，因此 Phase 1.5 尚未 complete，需人工审查有意变化后再更新基线。
 - 二次源码对比发现 `tsfrontend` 与 `frontendwire` 复制了完整 serialized validator；虽然 shape/validator 主体当前近似相同，effect helper 已在赋值、解构、for-of/in、property-name 和 type-context 规则上发生差异。后续不再手工同步两份实现，改为 `frontendwire` 单一 validator，`tsfrontend` 最终验证委托给 wire。
-- `scripts/doctor.ps1 -Quiet` 二次复核失败：当前 submodule worktree 与 lock 中 patch 不一致，状态为 `divergent`。旧 materialized-exact/remote apply 日志只保留为历史证据；实现与 baseline 稳定后必须重生成 patch/hash，并从 clean parent clone 重跑。
+- `[历史，已退役机制]` `scripts/doctor.ps1 -Quiet` 二次复核失败：当时 submodule worktree 与 lock 中 patch 不一致，状态为 `divergent`。旧 materialized-exact/remote apply 日志只保留为历史证据；该处理路径现已被 pinned-fork 交付取代。
 - 路线图把原阶段 2 拆成 Phase 2A 与 2B。2A 只闭合 `add(number, number)` 的 snapshot/HIR/MIR/real LLVM/object/LLD/process/Node 链；2B 才扩 bool、变量、调用、CFG、string/null/undefined 和单次求值语法。
 - `REL-001` 拆出 `REL-001a` first-slice runner core，避免完整 release runner 与尚不存在的 backend/artifact oracle 形成验收依赖环。`VERT-001` 依赖 `REL-001a`，完整 handbook/diagnostic coverage 留给后续 `REL-001`。
 - 调整后下一顺序：单一 wire validator -> target/cache 与 no-EH 配置 -> replay/frontend migration full regression -> `IR-000` contract infrastructure 全量验收 -> 最后 clean-parent delivery -> Phase 2A typed-HIR 后续 handlers + number-only HIR/MIR verifier -> empty startup -> real LLVM/object/LLD -> `REL-001a` -> `VERT-001` -> Node differential -> Phase 2B。
 
-## 2026-08-05 审计收口增量
+## 2026-08-05 审计收口增量（历史检查点；旧 patch 机制已退役）
 
 - `FE-009a` 已同步 assignment/destructuring/for-of 相关 capture/wire helper并增加 round-trip tests；完整 `snapshot_validate.go` 仍在 `tsfrontend`/`frontendwire` 各有一份，因此只能记为 `implemented / acceptance-blocked`，下一步是删除 serialized validator 双写，而不是继续人工同步。
 - `FE-010/IR-000` 已进一步闭合：独立 replay process 会真实执行 `validate-snapshot -> typed-hir` canonical production prefix；dependency closure、跨进程重复输出、显式 evaluation-order/single-block HIR、缺 handler和 HIR/event tamper 拒绝均有 checked-in tests。typed HIR 之后的 RepresentationPlan/MIR/backend handlers 仍属于 Phase 2A。
-- 计划纠正了 FND 顺序：旧 patch 当前 `divergent`，但 `FND-004a` 不能先于仍会修改工作树的 FE/IR 任务。正确顺序是单一 wire validator -> target/cache 与 no-EH 配置 -> migration/full regression -> IR contract full regression -> 最后重生成 patch/hash并做 clean-parent test/vet。
+- `[历史，已退役机制]` 当时计划纠正了 FND 顺序：旧 patch 为 `divergent`，且 `FND-004a` 不能先于仍会修改工作树的 FE/IR 任务。该 patch 重生成流程现已由固定 fork commit、upstream merge、remote fork verification 和 clean-parent gate 取代。
 - 新增 `FE-011b`：当前代码/default golden/lock 只接受未实现的 `llvm-eh`，与“首切无 EH、首个 throwing profile 为 status/result”的架构不一致。Phase 2A 前先引入 canonical no-EH mode；status-code/native-unwind 后续分别锁定，禁止把未实现 capability 写入 artifact provenance。
 - Phase 2A 改用 first-slice 子任务 `IR-001a..005a/007a`、`RT-002a`、`BE-002a`，避免完整 IR/runtime/backend issue 中的变量、调用、general CFG、bool/string/null、phi/memory 和完整 registry 验收反向拉入 `add(number, number)` 纵切。Phase 2B 继续负责这些扩展。
 
-## 2026-08-05 Phase 1.5 退出审计收口（历史检查点，已由 2026-08-06 二次审计取代）
+## 2026-08-05 Phase 1.5 退出审计收口（历史检查点；旧 patch 机制已退役）
 
 - `FE-008a/009a` 已关闭：删除 capture 侧完整 serialized validator 与 shape registry 副本；`tsfrontend.ValidateProgramSnapshot` 只委托 `frontendwire`，fixture 增加 capture -> wire encode/decode/re-encode byte parity。
 - `FE-011b` 已关闭：默认、options golden、BuildPlan 和 `ts2bin.lock.json` 使用 `exceptions=none`；`llvm-eh` 只保留为未来常量并返回 `unavailable`。
@@ -257,16 +257,27 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - 当前验证全绿：核心六包、核心六包 race、`go vet ./...`、frontend 九阶段（package/validator/module/checker/CLI/compatibility/race/shuffle/repeat）、`go test ./... -count=1`。此前 Windows watcher 时序失败本轮未复现，不能作为项目阻塞。
 - BuildPlan 语义已纠正：它是绑定 frontend hash 的 canonical unresolved request，不是 executable capability proof。此历史检查点中的 `CapabilitySet` 已由当前契约拆分为 resolver 的 `AvailableCapabilityCatalog` 与 structural MIR 后的 `BoundCapabilityClosure`；后续文档以二者为准。
 - 后续计划重排：当前依赖为 `IR-007a -> IR-001a -> IR-002a -> IR-003a` 与 `BE-001a`、`RT-002a` 并行；三路汇合到 `TC-001a` 后再做 `IR-004a/005a`、`RT-002b`、`BE-002a/004a`、`REL-001a`、`VERT-001`、`REL-002a`。
-- 最终 patch SHA-256 `759e0661a91c7b757a78106425618046dc0b8e348f2c1e31263f486c074a9c9f` 已生成；doctor materialized-exact、官方 remote shallow clean checkout apply/full test/vet/cleanup、WSL Go-LLVM verifier 和 Rust staticlib/LLD smoke 全部通过。当前唯一 Phase 1.5 交付阻塞是 `FND-004a` 的 parent commit/HEAD clean-clone 证明；未经用户授权不创建 commit，因此只能在提交后严格关闭。
+- `[历史，已退役机制]` 最终 patch SHA-256 `759e0661a91c7b757a78106425618046dc0b8e348f2c1e31263f486c074a9c9f` 当时已生成；doctor materialized-exact、官方 remote shallow clean checkout apply/full test/vet/cleanup、WSL Go-LLVM verifier和 Rust staticlib/LLD smoke 全部通过。该证据不适用于现行 pinned-fork checkout。
 
-## 2026-08-06 契约二次审计（当前状态）
+## 2026-08-06 契约二次审计（历史检查点；旧 patch 机制已退役）
 
-本节取代上一个“Phase 1.5 退出审计收口”中的当前状态、旧 patch hash 和 Phase 2A 顺序；更早段落仅保留历史证据。
+本节曾取代上一个“Phase 1.5 退出审计收口”；当前状态以后续“Phase 2A 入口复审”为准，更早段落仅保留历史证据。
 
 - 总体架构不变：`FrontendSnapshot -> target-independent typed HIR`；`BuildPlan + manifests -> ResolveTargetContext`；两者在 `RepresentationPlan` 汇合后进入 `target-aware MIR -> LLVM/object -> Rust C ABI runtime + LLD`。
 - canonical pass DAG 已新增不可绕过的 `ResolveTargetContext`，并显式区分 `AvailableCapabilityCatalog` 与 structural MIR 后的 `BoundCapabilityClosure`。
 - typed HIR 已把 FrontendSnapshot schema/hash、source hash、tsgo commit、stdlib hash 与 Kind manifest hash 纳入 canonical provenance；replay/post-verifier 交叉校验来源 snapshot hash。
 - BigInt/RegExp 的 snapshot-time 诊断已改为 target-independent `subset.lowerer_unavailable`；runtime capability availability 留到 TargetContext 后判断。
 - Phase 2A 依赖改为并行的 `IR-007a -> IR-001a -> IR-002a -> IR-003a`、`BE-001a`、`RT-002a`，然后 `BE-001a + RT-002a + BuildPlan -> TC-001a -> IR-004a/005a`。LLVM TargetMachine 查询值是 DataLayout 权威源；link 只复验同一个 immutable TargetContext，不重新解析。
-- 二次审计后的 patch 已重生成，SHA-256 为 `cc4c9ab435810a23d31a1c1c72b040ae9241fbbadf1c041c6815df7266339e95`；`b2dca40` 的 doctor、clean-clone frontend 九阶段（含 race/shuffle/repeat）、全仓 `go test ./...`/`go vet ./...` 与 official remote isolated apply/full test/vet/cleanup 已通过。`FND-004` 与 Phase 1.5 已 complete，Phase 2A 可启动但尚未完成。
-- Phase 2A 首切入口新增四项关闭条件：validated snapshot 才能作为 subset/lowering 输入；`IR-001a` 冻结 HIR schema major 2 并纳入 lock patch/compiler build identity；`IR-002a` 传递 canonical logical capability requirements（纯 add 的 bound closure 可为空）；`TC-001a` 使用 typed multi-artifact resolver envelope，显式证明 HIR/BuildPlan/manifests join，不能用 `PassState.Facts []string` 冒充 proof。
+- `[历史，已退役机制]` 二次审计后的 patch SHA-256 曾为 `cc4c9ab435810a23d31a1c1c72b040ae9241fbbadf1c041c6815df7266339e95`；`b2dca40` 的 doctor、clean-clone frontend 九阶段、全仓 test/vet 与 isolated apply 验证当时通过。该交付机制已被 pinned fork commit 取代。
+- Phase 2A 首切入口当时新增四项关闭条件：validated snapshot 才能作为 subset/lowering 输入；`IR-001a` 冻结 HIR schema major 2 并纳入 compiler build identity；`IR-002a` 传递 canonical logical capability requirements（纯 add 的 bound closure 可为空）；typed multi-artifact envelope 不能用 `PassState.Facts []string` 冒充 proof。随后复审把职责进一步纠正为 `TC-001a` 只解析 BuildPlan/manifests，HIR provenance join 留给 RepresentationPlan。
+
+## 2026-08-06 Phase 2A 入口复审（当前状态）
+
+- `typescript-go` 现行交付已迁移到 `https://github.com/pqcqaq/typescript-go.git` 的 pinned fork commit；lock 同时固定 reviewed upstream ancestor，upstream 更新只允许显式 merge。旧 patch/materialize/apply 机制不再活跃。本地 doctor、隔离 fork smoke/full test/vet、frontend 九阶段、locked replay 双构建和远端 fork verification 已通过；仅 committed parent HEAD clean-clone 待执行。
+- 总体方向继续采用两条语义支路：validated FrontendSnapshot -> target-independent HIR；BuildPlan + toolchain/runtime manifests -> TargetContext。执行器可以在 HIR 后调度 resolver并用 envelope 保留 HIR，但 resolver 不语义读取 HIR；首次 provenance join 固定在 RepresentationPlan。
+- `FE-012a` 已关闭：`Frontend.Build` 返回 canonical 深拷贝 sealed snapshot，外部 diagnostics 与 snapshot 脱离；`RunSubsetGate` 自行完整验证，production replay 在 in-memory、serialized、frontend-wrapper 三条路径拒绝重哈希 using/async/decorator/any/unknown 篡改。
+- `IR-007a` 已关闭：number contract v1 固定 binary64、canonical qNaN、保留 `-0`、round-to-nearest ties-to-even/no-fast-math 加法，以及固定 C ABI/bit observation；替代表示、policy、operator 或 ABI 均 fail closed。
+- `IR-001a/002a/003a` 已关闭：HIR schema/lock 升为 major 2；CompilerBuildIdentity 覆盖 upstream commit、fork commit 与 lowering schema/hash；source-type-plan 保持 identity-free，不同 driver identity 生成不同 HIR provenance/hash；logical requirements、number-only lowering 和 malformed verifier matrix 已通过。
+- `PassArtifactEnvelope` 只标为基础设施 complete：它提供 role/schema/payload-bound digest 与不可变 transition。`TC-001a` 仍 pending，必须等待真实 `BE-001a` LLVM TargetMachine/DataLayout 与 `RT-002a` runtime/toolchain manifests，不能用 fixture payload、MIR v1兼容 verifier 或 fact labels 冒充完成。
+- 旧 patch checkout 下的核心回归只保留为历史证据；fork 迁移后的核心六包（普通与 race）、串行 `go vet -p 1 ./...`、`go test -p 1 ./... -count=1`、doctor、frontend 九阶段、locked replay 双构建、本地隔离和远端 fork verification 已通过。current committed HEAD clean-clone 是最后一项交付门禁。
+- 调整后的下一顺序：`BE-001a || RT-002a -> TC-001a -> IR-004a/005a -> RT-002b + BE-002a/004a -> REL-001a -> VERT-001 -> REL-002a`。Phase 2B、对象、GC、EH、async 和第二目标继续 blocked。

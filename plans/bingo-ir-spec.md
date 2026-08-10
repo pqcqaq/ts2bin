@@ -1,6 +1,6 @@
 # Bingo IR 初始规格
 
-本文定义当前 pre-release Bingo HIR/MIR v1 的最小可实现形式；`IR-001a` 在 mandatory provenance 和 logical capability contract 冻结时必须协调升为 schema major 2。它不是 LLVM IR 的别名，也不是 TypeScript AST 的序列化版本。
+本文定义当前 Bingo HIR v2 与 pre-release MIR v1 的最小可实现形式。HIR v2 已冻结 mandatory compiler provenance、logical capability requirements 与 number-only first-slice verifier；MIR v1 仍保持原通用 structural 语义，真正 target-aware MIR/provenance 由 `IR-004a/005a` 建立。它不是 LLVM IR 的别名，也不是 TypeScript AST 的序列化版本。
 
 ## 1. 分层职责
 
@@ -260,7 +260,7 @@ reason, requiredCapability
 
 `ResolveTargetContext` 是 Phase 2A 的 target-dependent 门，不是普通 HIR rewrite；它消费 canonical unresolved `BuildPlan`、锁定 toolchain/runtime manifests 和 LLVM `TargetMachine`，产出 `target-context`、`data-layout` 与 `available-capability-catalog` facts。它可以与 target-independent HIR 链并行。后续 `RepresentationPlan` 的 join pre-verifier 同时消费 verified HIR、BuildPlan 与 resolver output，交叉核对 frontend/provenance hashes 后才允许进入 target-aware MIR。后续表示/MIR pass 只消费这些已验证 inputs，不得从 executor 初始状态注入原始 `target` 或 `capability-manifest` 冒充 resolver 结果。`BindCapabilitiesAndFreezeExactEffects` 在 structural MIR 之后从实际 intrinsic 产出 `bound-capability-closure` 和 frozen exact effects；available catalog 与程序实际绑定闭包不得使用同一个名称或 hash。每个 pass 都声明输入 schema、输出 schema、读取/新增的 fact 和是否会引入 call/safepoint/throw/suspend。pass 不得改变可观察求值顺序；effect freeze 后不得引入新 capability/safepoint/throw，root placement 后不得运行会隐藏引用 lifetime 或引入新 safepoint 的 MIR pass。每步可独立 dump/diff，且有正常、malformed 和循环 specialization golden。
 
-Phase 2A 的 executable pass state 必须把 resolver 输入/输出保存为带 schema、canonical bytes 和 digest 的 typed envelope/fact store，并在 resolver 之后同时保留 HIR、BuildPlan、TargetContext、DataLayout 与 available catalog。仅保存 `[]string` fact 标签不能作为 capability 或 provenance proof；post-verifier 必须从 envelope 内容独立重算 digest、manifest binding 和 join invariant。
+Phase 2A 的 executable pass state 必须把 resolver 输入/输出保存为带 schema、canonical bytes 和 digest 的 typed envelope/fact store，并在 resolver 之后同时保留 HIR、BuildPlan、TargetContext、DataLayout 与 available catalog。resolver 只语义读取 BuildPlan/toolchain/runtime manifests；HIR 由 envelope 不可变保留，`RepresentationPlan` 才是首次 provenance join。仅保存 `[]string` fact 标签不能作为 capability 或 provenance proof；resolver post-verifier 独立重算 digest/manifest binding，RepresentationPlan pre-verifier 独立重算 join invariant。
 
 ## 10. Verifier 规则
 
@@ -334,7 +334,7 @@ HIR 与 MIR 使用分层 provenance；这些字段都属于 canonical content ha
 
 ```text
 HIR: schema version, FrontendSnapshot schema/hash, canonical source hashes,
-     CompilerBuildIdentity(upstream commit + patch base/SHA-256 + lowering schema),
+     CompilerBuildIdentity(upstream commit + fork commit + lowering schema/hash),
      standard-library hash, Kind-manifest hash + logical-capability-requirement digest
 MIR: HIR provenance + BuildPlan digest + TargetContext hash
      + toolchain/runtime/ABI/layout/available-capability manifest digests
@@ -344,4 +344,4 @@ MIR: HIR provenance + BuildPlan digest + TargetContext hash
 
 HIR canonical hash 必须覆盖全部 provenance；缺失、未知 schema major 或格式错误均由 verifier 拒绝。`RepresentationPlan` join pre-verifier 必须验证 HIR 的 `FrontendSnapshotHash` 与 `BuildPlan.FrontendHash` 相同，并验证 resolver output 与 BuildPlan 请求一致；replay/post-verifier 也必须交叉核对来源 plan，不能只在篡改后重新计算 HIR hash。MIR 构造把 available catalog 与后续 bound closure 分别哈希。
 
-reader 只保证读取同一 major IR version。当前 mandatory provenance 已在 pre-release v1 期间变化，因此 `IR-001a` 必须同步更新 `HIRSchemaVersion`、replay schema、lock 的 `bingoIR` 和 IR-008 migration/rejection tests 后再把 v2 视为稳定。缓存命中必须比较全部 digest；不能只比较源文件时间戳。
+reader 只保证读取同一 major IR version。mandatory provenance 在 pre-release v1 期间变化后已由 `IR-001a` 协调更新 `HIRSchemaVersion`、replay、lock 的 `bingoIR` 和旧 major 拒绝测试；当前 reader 只接受 HIR v2。缓存命中必须比较全部 digest；不能只比较源文件时间戳。

@@ -72,44 +72,6 @@ function GetCanonicalTreeHash([string]$Path) {
     } finally { $Hash.Dispose() }
 }
 
-function GetWorktreePatchHash([string]$CheckoutPath) {
-    $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("ts2bin-doctor-" + [guid]::NewGuid().ToString("N"))
-    $temporaryIndex = Join-Path $temporaryRoot "index"
-    $temporaryPatch = Join-Path $temporaryRoot "worktree.patch"
-    $previousIndex = $env:GIT_INDEX_FILE
-    try {
-        New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
-        $env:GIT_INDEX_FILE = $temporaryIndex
-        & git -c core.longpaths=true -C $CheckoutPath read-tree HEAD 2>$null
-        if ($LASTEXITCODE -ne 0) { return $null }
-        & git -c core.longpaths=true -C $CheckoutPath add -A -- . 2>$null
-        if ($LASTEXITCODE -ne 0) { return $null }
-
-        $git = (Get-Command git -ErrorAction Stop).Source
-        $startInfo = [Diagnostics.ProcessStartInfo]::new()
-        $startInfo.FileName = $git
-        $startInfo.UseShellExecute = $false
-        $startInfo.RedirectStandardOutput = $true
-        $startInfo.RedirectStandardError = $true
-        $startInfo.Environment["GIT_INDEX_FILE"] = $temporaryIndex
-        foreach ($argument in @(
-            "-c", "core.longpaths=true", "-C", $CheckoutPath, "diff", "--cached", "--binary", "--full-index",
-            "--no-ext-diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/"
-        )) { $startInfo.ArgumentList.Add($argument) }
-        $process = [Diagnostics.Process]::Start($startInfo)
-        $output = [IO.File]::Create($temporaryPatch)
-        try { $process.StandardOutput.BaseStream.CopyTo($output) } finally { $output.Dispose() }
-        $process.StandardError.ReadToEnd() | Out-Null
-        $process.WaitForExit()
-        if ($process.ExitCode -ne 0) { return $null }
-        return (Get-FileHash -LiteralPath $temporaryPatch -Algorithm SHA256).Hash.ToLowerInvariant()
-    } finally {
-        if ($null -eq $previousIndex) { Remove-Item Env:GIT_INDEX_FILE -ErrorAction SilentlyContinue }
-        else { $env:GIT_INDEX_FILE = $previousIndex }
-        if (Test-Path -LiteralPath $temporaryRoot) { Remove-Item -LiteralPath $temporaryRoot -Recurse -Force -ErrorAction SilentlyContinue }
-    }
-}
-
 if (-not $Quiet) { Write-Host "ts2bin toolchain doctor" -ForegroundColor Cyan; Write-Host "root: $Root" }
 Report "lock schema" ($Lock.schemaVersion -eq 2 -and $Lock.lockFormat -eq "ts2bin.lock.v2") ("schema={0}; format={1}" -f $Lock.schemaVersion, $Lock.lockFormat)
 CheckVersion "Go" "go" @("version") ("go" + $Lock.toolchains.go)
@@ -125,20 +87,34 @@ CheckVersion "Ninja" "ninja" @("--version") ""
 $Git = Get-Command git -ErrorAction SilentlyContinue
 if ($Git) {
     $LockedCommit = [string]$Lock.typescriptGo.commit
+    $ForkCommit = [string]$Lock.typescriptGo.forkCommit
+    $UpstreamCommit = [string]$Lock.typescriptGo.upstreamCommit
+    $ForkRemote = [string]$Lock.typescriptGo.forkRemote
+    $UpstreamRemote = [string]$Lock.typescriptGo.remote
+    $CheckoutPath = Join-Path $Root "typescript-go"
     $GitlinkLine = (& $Git.Source -C $Root ls-files --stage -- typescript-go 2>$null | Select-Object -First 1)
     $GitlinkCommit = $null
     if ($GitlinkLine -match '^160000\s+([0-9a-fA-F]{40,64})\s+\d+\s+typescript-go$') {
         $GitlinkCommit = $Matches[1].ToLowerInvariant()
     }
-    $CheckoutCommit = (& $Git.Source -C (Join-Path $Root "typescript-go") rev-parse HEAD 2>$null | Select-Object -First 1)
+    $CheckoutCommit = (& $Git.Source -C $CheckoutPath rev-parse HEAD 2>$null | Select-Object -First 1)
     if ($CheckoutCommit) { $CheckoutCommit = $CheckoutCommit.Trim().ToLowerInvariant() }
 
-    $CommitPattern = '^[0-9a-f]{40,64}$'
+    $CommitPattern = '^[0-9a-f]{40}$'
+    $IdentityMetadataOk = (
+        $LockedCommit -match $CommitPattern -and
+        $ForkCommit -match $CommitPattern -and
+        $UpstreamCommit -match $CommitPattern -and
+        $LockedCommit -eq $ForkCommit -and
+        [string]$Lock.typescriptGo.reproducibilityStatus -eq "pinned-fork-commit" -and
+        $null -eq $Lock.typescriptGo.patch
+    )
+    Report "typescript-go fork metadata" $IdentityMetadataOk ("commit={0}; fork={1}; upstream={2}; status={3}" -f ($LockedCommit ?? "missing"), ($ForkCommit ?? "missing"), ($UpstreamCommit ?? "missing"), [string]$Lock.typescriptGo.reproducibilityStatus)
     Report "typescript-go lock" ($LockedCommit -match $CommitPattern) ($LockedCommit ?? "missing or invalid commit")
     Report "typescript-go parent gitlink" ($null -ne $GitlinkCommit) ($GitlinkCommit ?? "missing 160000 gitlink entry")
     Report "typescript-go checkout" ($CheckoutCommit -match $CommitPattern) ($CheckoutCommit ?? "unable to resolve HEAD")
     $Closed = (
-        $LockedCommit -match $CommitPattern -and
+        $IdentityMetadataOk -and
         $null -ne $GitlinkCommit -and
         $CheckoutCommit -match $CommitPattern -and
         $LockedCommit.ToLowerInvariant() -eq $GitlinkCommit -and
@@ -147,46 +123,38 @@ if ($Git) {
     $ClosureDetail = "gitlink={0}; checkout={1}; lock={2}" -f ($GitlinkCommit ?? "missing"), ($CheckoutCommit ?? "missing"), ($LockedCommit ?? "missing")
     Report "typescript-go revision closure" $Closed $ClosureDetail
 
-    $PatchState = "unconfigured"
-    $PatchDetail = "lock has no patch metadata"
-    $PatchConfigured = $null -ne $Lock.typescriptGo.patch
-    $MetadataOk = $false
-    if ($PatchConfigured) {
-        $PatchPath = Join-Path $Root ([string]$Lock.typescriptGo.patch.path)
-        $PatchRoot = [IO.Path]::GetFullPath((Join-Path $Root "patches\typescript-go"))
-        $ResolvedPatchPath = [IO.Path]::GetFullPath($PatchPath)
-        $PathOk = $ResolvedPatchPath.StartsWith($PatchRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
-        $PatchExists = Test-Path -LiteralPath $PatchPath -PathType Leaf
-        $PatchHash = $null
-        if ($PatchExists) {
-            $PatchHash = (Get-FileHash -LiteralPath $PatchPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        }
-        $PatchHashOk = $PatchExists -and $PatchHash -eq ([string]$Lock.typescriptGo.patch.sha256).ToLowerInvariant()
-        $MetadataOk = $PathOk -and $PatchHashOk -and
-            [string]$Lock.typescriptGo.patch.baseCommit -eq [string]$Lock.typescriptGo.upstreamCommit -and
-            [string]$Lock.typescriptGo.patch.sha256 -match '^[0-9a-fA-F]{64}$'
-        $CheckoutPath = Join-Path $Root "typescript-go"
-        $DirtyLines = @(git -C $CheckoutPath status --porcelain --untracked-files=all 2>$null)
-        $WorktreeHash = if ($MetadataOk) { GetWorktreePatchHash $CheckoutPath } else { $null }
-        if (-not $DirtyLines) {
-            $PatchState = "clean-upstream"
-            $PatchDetail = "checkout is clean at the locked upstream base"
-        } elseif ($MetadataOk -and $WorktreeHash -eq ([string]$Lock.typescriptGo.patch.sha256).ToLowerInvariant()) {
-            $PatchState = "materialized-exact"
-            $PatchDetail = "worktree diff matches the locked patch hash"
-        } else {
-            $PatchState = "divergent"
-            $PatchDetail = "worktree diff does not match the locked patch"
-        }
+    $DirtyLines = @(& $Git.Source -C $CheckoutPath status --porcelain --untracked-files=all 2>$null)
+    Report "typescript-go fork worktree" ($DirtyLines.Count -eq 0) ("changes={0}" -f $DirtyLines.Count)
+
+    $ConfiguredSubmoduleRemote = (& $Git.Source config -f (Join-Path $Root ".gitmodules") --get submodule.typescript-go.url 2>$null | Select-Object -First 1)
+    $CheckoutForkRemote = (& $Git.Source -C $CheckoutPath remote get-url origin 2>$null | Select-Object -First 1)
+    $CheckoutUpstreamRemote = (& $Git.Source -C $CheckoutPath remote get-url upstream 2>$null | Select-Object -First 1)
+    Report "typescript-go submodule remote" ($ConfiguredSubmoduleRemote -eq $ForkRemote) ("configured={0}; lock={1}" -f ($ConfiguredSubmoduleRemote ?? "missing"), $ForkRemote)
+    Report "typescript-go fork remote" ($CheckoutForkRemote -eq $ForkRemote) ("origin={0}; lock={1}" -f ($CheckoutForkRemote ?? "missing"), $ForkRemote)
+    $UpstreamRemoteOk = [string]::IsNullOrWhiteSpace([string]$CheckoutUpstreamRemote) -or $CheckoutUpstreamRemote.Trim() -eq $UpstreamRemote
+    Report "typescript-go upstream remote" $UpstreamRemoteOk ("upstream={0}; lock={1}; merge script adds it when absent" -f ($CheckoutUpstreamRemote ?? "not configured"), $UpstreamRemote)
+
+    $UpstreamIsAncestor = $false
+    if ($UpstreamCommit -match $CommitPattern -and $ForkCommit -match $CommitPattern) {
+        & $Git.Source -C $CheckoutPath merge-base --is-ancestor $UpstreamCommit $ForkCommit 2>$null
+        $UpstreamIsAncestor = $LASTEXITCODE -eq 0
     }
-    $MetadataDetail = if ($PatchConfigured) {
-        "path={0}; metadata={1}" -f ([string]$Lock.typescriptGo.patch.path), $MetadataOk
-    } else {
-        "lock has no patch metadata"
-    }
-    Report "typescript-go patch metadata" $MetadataOk $MetadataDetail
-    Report "typescript-go patch state" ($PatchState -eq "materialized-exact") ("state={0}; {1}" -f $PatchState, $PatchDetail)
-    Report "typescript-go reproducibility" ([string]$Lock.typescriptGo.reproducibilityStatus -eq "reproducible-patch" -and $PatchState -eq "materialized-exact") ("status={0}; state={1}" -f ([string]$Lock.typescriptGo.reproducibilityStatus), $PatchState)
+    Report "typescript-go upstream ancestry" $UpstreamIsAncestor ("upstream={0}; fork={1}" -f $UpstreamCommit, $ForkCommit)
+    $ForkPinned = (
+        $IdentityMetadataOk -and
+        $null -eq $Lock.typescriptGo.patch
+    )
+    Report "typescript-go reproducibility" $ForkPinned ("status={0}; fork={1}" -f [string]$Lock.typescriptGo.reproducibilityStatus, $ForkCommit)
+
+    $LegacyPatchPaths = @(
+        "patches/typescript-go/ts2bin.patch",
+        "patches/typescript-go/README.md",
+        "scripts/materialize-typescript-go.ps1",
+        "scripts/update-typescript-go-patch.ps1",
+        "scripts/verify-typescript-go-patch.ps1"
+    ) | ForEach-Object { Join-Path $Root $_ }
+    $LegacyPatchPresent = @($LegacyPatchPaths | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0
+    Report "legacy typescript-go patch flow" (-not $LegacyPatchPresent) "patch metadata and materialization scripts must be absent"
 } else { Report "git" $false "command not found" }
 
 $VersionSource = Join-Path $Root "typescript-go\internal\core\version.go"
@@ -194,6 +162,29 @@ $VersionText = Get-Content -LiteralPath $VersionSource -Raw -ErrorAction Silentl
 $SourceVersion = $null
 if ($VersionText -match 'var\s+version\s*=\s*"([^"]+)"') { $SourceVersion = $Matches[1] }
 Report "TypeScript version" ($SourceVersion -eq [string]$Lock.typescriptGo.version) ($SourceVersion ?? "unable to read internal/core/version.go")
+
+$BaselineSource = Join-Path $Root "typescript-go\internal\tsfrontend\baseline.go"
+$BaselineText = Get-Content -LiteralPath $BaselineSource -Raw -ErrorAction SilentlyContinue
+$SourceUpstreamCommit = $null
+if ($BaselineText -match 'TypeScriptGoUpstreamCommit\s*=\s*"([0-9a-f]{40})"') { $SourceUpstreamCommit = $Matches[1] }
+Report "TypeScript upstream provenance" ($SourceUpstreamCommit -eq [string]$Lock.typescriptGo.upstreamCommit) ("source={0}; lock={1}" -f ($SourceUpstreamCommit ?? "missing"), [string]$Lock.typescriptGo.upstreamCommit)
+
+$ReplayBuild = $Lock.toolchains.replayBuild
+$ReplayBuildOk = (
+    $null -ne $ReplayBuild -and
+    [string]$ReplayBuild.goos -eq "windows" -and
+    [string]$ReplayBuild.goarch -eq "amd64" -and
+    [string]$ReplayBuild.goamd64 -eq "v1" -and
+    [string]$ReplayBuild.cgoEnabled -eq "0" -and
+    [string]$ReplayBuild.goenv -eq "off" -and
+    [string]$ReplayBuild.goflags -eq "" -and
+    [string]$ReplayBuild.gowork -eq "off" -and
+    [string]$ReplayBuild.gotoolchain -eq ("go" + [string]$Lock.toolchains.go) -and
+    [string]$ReplayBuild.goexperiment -eq "" -and
+    [string]$ReplayBuild.gofips140 -eq "off" -and
+    [string]$ReplayBuild.godebug -eq ""
+)
+Report "replay build target" $ReplayBuildOk ("goos={0}; goarch={1}; goamd64={2}; cgo={3}; goenv={4}; gotoolchain={5}" -f [string]$ReplayBuild.goos, [string]$ReplayBuild.goarch, [string]$ReplayBuild.goamd64, [string]$ReplayBuild.cgoEnabled, [string]$ReplayBuild.goenv, [string]$ReplayBuild.gotoolchain)
 
 try {
     $Stdlib = GetCanonicalTreeHash (Join-Path $Root "typescript-go\internal\bundled\libs")

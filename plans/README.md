@@ -51,14 +51,15 @@ TypeScript source
 - 不在 HIR 阶段过早执行 LLVM 化。联合类型、泛型、闭包、异常、异步和资源清理需要先完成语义 lowering。
 - 默认编译一个“静态可验证 TypeScript 子集”；`any`、动态对象和 JavaScript 反射通过显式 `dynamic` 配置隔离，不能悄悄扩大语义。
 - 生产后端优先使用 `tinygo.org/x/go-llvm` 绑定真实 LLVM；`github.com/llir/llvm` 仅作为无 LLVM 环境下的 IR 文本测试或离线工具。
-- 当前 `typescript-go` 的公开 API 尚未就绪，且核心包位于 `internal/`。第一阶段应维护一个薄 fork，将 `cmd/ts2bin` 和适配层放在 `github.com/microsoft/typescript-go` 模块内部。
+- 当前 `typescript-go` 的公开 API 尚未就绪，且核心包位于 `internal/`。第一阶段维护 `pqcqaq/typescript-go` 薄 fork，同时保留 `github.com/microsoft/typescript-go` 模块路径，将 `cmd/ts2bin` 和适配层放在该模块内部。
 - checker 只能在独占借用期间访问，并且每次借用都必须调用 release；snapshot 不得持有 checker、Type 或 Signature 指针。
 - `.d.ts` 只提供编译期声明，不等于目标产物存在实现；所有运行时调用必须通过版本化 capability manifest 和 ABI 闭包检查。
 - 目标 runtime 使用 Rust 编写并按 target/profile 预编译为一个 umbrella `staticlib`，内部 crates 使用 `rlib`；LLVM 生成代码只调用版本化 `extern "C"` ABI，最终由 LLD 链接，不依赖 Rust ABI 或跨版本 bitcode。
 - 标准库采用“Rust 原语 + 受限 TypeScript 自举算法 + 可选重型引擎适配”三层结构；泛型自举代码以已验证 Bingo HIR/package 分发并按需实例化。
 - 普通 TypeScript 对象允许循环引用，general static profile 默认使用非移动 tracing GC；ARC/arena 只能作为有额外可证明约束的受限 profile。
 - `Array<T>` 的可变元素默认不变，`ReadonlyArray<T>` 和只读字段才允许协变；tsgo 的历史兼容性结果不能直接当作 Bingo 布局安全证明。
-- Phase 1.5 已形成 schema v2、wire 单一 validator、Kind shape/semantic-proof registry、带 provenance 的 target-independent `FrontendSnapshot`、canonical unresolved `BuildPlan`、checker-free replay，以及执行到 typed HIR 的 canonical production pass 前缀。`FE-008..011`、`IR-000` 与最终 patch/clean-clone 交付门均已通过；`b2dca40` 的 doctor、frontend 九阶段（含 race/shuffle/repeat）、全仓 test/vet 和 official remote isolated verification 均通过，SHA-256 由 `ts2bin.lock.json` 锁定。Phase 2A 现在可以启动：先并行建立 `BE-001a`/`RT-002a`，再以 typed `ResolveTargetContext` envelope 绑定 toolchain/runtime manifests、权威 DataLayout 和 `AvailableCapabilityCatalog`；target-aware MIR 之后才生成 `BoundCapabilityClosure`。number-only MIR/real LLVM/object/LLD 纵切通过前，Phase 2B 和广泛语法保持 blocked。
+- `typescript-go` 的现行交付来自 `pqcqaq/typescript-go` 的固定 fork commit；lock 同时记录 reviewed Microsoft upstream ancestor，更新通过显式 upstream merge 与完整 compatibility gate。旧 patch/materialize/apply 机制已经退役，仅可作为标明已废弃的历史证据出现。
+- Phase 1.5 已形成 schema v2、wire 单一 validator、Kind shape/semantic-proof registry、带 provenance 的 target-independent `FrontendSnapshot`、canonical unresolved `BuildPlan`、checker-free replay，以及执行到 typed HIR 的 canonical production pass 前缀。当前审计又关闭了 `FE-012a` 与 `IR-007a/001a/002a/003a`：HIR 已升为 major 2，绑定完整 compiler build identity、logical capability requirements 和严格的 first-slice number contract。下一步并行建立 `BE-001a`/`RT-002a`，再由 `ResolveTargetContext` 只解析 BuildPlan/toolchain/runtime manifests 并产出权威 DataLayout/catalog；typed envelope 保留 HIR，但首次 HIR/target provenance join 明确发生在 `RepresentationPlan`。target-aware MIR 之后才生成 `BoundCapabilityClosure`。number-only MIR/real LLVM/object/LLD 纵切通过前，Phase 2B 和广泛语法保持 blocked。
 
 ## 交付物与唯一事实来源
 
