@@ -290,3 +290,9 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - canonical production pipeline 已真实执行全部 14 个 pass，两次相同输入的 final MIR 与逐 pass dump byte identity 稳定；现有 general MIR v1 verifier 保持独立，未被冒充为 first-slice target-aware verifier。
 - 验证通过：Windows `go test -p=1 ./... -count=1`、`go vet ./...`、checker-free dependency audit；WSL/LLVM 20 `go test -tags=llvm20 ./internal/bingomir ./internal/targetcontext ./internal/llvmbackend -count=1`。
 - 下一顺序固定为 `IR-008a -> RT-002b + BE-002a -> BE-004a -> REL-001a -> VERT-001 -> REL-002a`。`VERT-001` 是第一个 Linux x86-64 可执行文件；计划内的 self-hosted stdlib 仍需 Phase 2B 的变量、调用、控制流、模块和最小 stdlib contract。编译器主体是 Go，“编译器编译自身”不在当前路线中，不能与 stdlib self-hosting 混称。
+
+## 2026-08-10 IR-008a 完成
+
+- `internal/irartifact` 新增 checker-free first-slice case manifest loader、严格 HIR/MIR decode、canonical JSON/text rendering 和 schema/provenance-first structural diff；`emit-hir --verify` 与 `emit-mir --verify` 接入 `ts2bin`。
+- `testdata/ts2bin/lowering` 固定 `add(number, number)` 的 serialized frontend snapshot、BuildPlan 与 runtime manifest。HIR replay 只读取 snapshot；MIR 才读取已验证 BuildPlan/runtime manifest 和真实 LLVM TargetMachine。
+- Windows/no-LLVM 默认构建对 `emit-mir` 明确 fail closed；WSL LLVM 20 下 `emit-mir --verify` 与 bound MIR equal diff 通过。IR-008a 完成后下一顺序为 `RT-002b + BE-002a -> BE-004a -> REL-001a -> VERT-001 -> REL-002a`。

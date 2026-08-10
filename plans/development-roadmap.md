@@ -91,8 +91,8 @@
 2. `[complete] FE-012a` 已关闭 validated-input 边界：subset gate 与 production lowering 只消费完整验证后的 detached snapshot；primitive replay 仅支持参数读取、`number + number` 和单一 return，HIR/op 显式携带 canonical empty logical capability requirements。
 3. `[complete] BE-001a + RT-002a`：Go-LLVM/TargetMachine/DataLayout 基座与 Rust workspace/empty startup/manifest scaffold 已完成；二者只提供 resolver 所需 manifests，不自行声称完成 capability binding。
 4. `[complete] BE-001a + RT-002a + BuildPlan -> TC-001a ResolveTargetContext`，resolver 只语义读取 BuildPlan/toolchain/runtime manifests，以 typed multi-artifact envelope 绑定 immutable TargetContext、LLVM authoritative DataLayout 与 AvailableCapabilityCatalog，并原样保留 HIR；裸 `Facts []string` 只可排序，不可作为 proof。首切只接受显式 Linux x86-64、LLVM 20、generic CPU、no-EH 和锁定 runtime。
-5. `[ready] IR-003a + TC-001a -> IR-004a/005a` 先用 RepresentationPlan join 核对 HIR/BuildPlan/context/compiler identity provenance，再完成 target-aware HIR -> MIR、structural verifier 与 `BoundCapabilityClosure`/exact effects；拒绝无返回 CFG、非法/稀疏/重复 ID（含 module-level duplicate FunctionID）、错误类型/effect、错误 DataLayout/capability 和伪造 provenance。首切必须覆盖 non-empty available catalog 与 empty add bound closure 的分层测试。
-6. 为 canonical pass executor 提供 typed HIR 之后的首切 production handlers；不适用的阶段必须由 verifier 证明为 no-op，不能靠测试 handler 冒充生产集成。
+5. `[complete] IR-003a + TC-001a -> IR-004a/005a` 已用 RepresentationPlan join 核对 HIR/BuildPlan/context/compiler identity provenance，并完成 target-aware HIR -> MIR、structural verifier 与 `BoundCapabilityClosure`/exact effects；首切覆盖 non-empty available catalog 与 empty add bound closure 的分层测试。
+6. `[complete] IR-008a` 为 canonical pass executor 增加显式 case manifest、verified first-slice HIR/MIR canonical JSON/text serialization、schema-aware diff 与 `emit-hir --verify` / `emit-mir --verify` CLI；不适用阶段仍由 verifier 证明为 no-op，未引入语法面扩张。
 7. 完成 `RT-002b` 固定 `extern "C" double add(double,double)` 的 startup/harness、`BE-002a/004a` real LLVM/object/LLD 链路；完整 IR/runtime/backend issue 的 Phase 2B 范围不作为首切前置。
 8. 先实现最小 `REL-001a` case-runner core，再由 `VERT-001` 执行完整 snapshot-to-process 真实产物，并由 `REL-002a` 与 Node oracle 差分。
 
