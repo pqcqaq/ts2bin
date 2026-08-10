@@ -126,7 +126,7 @@
 
 ## Phase 1.5 与调整后主链（2026-08-06）
 
-`FE-012a`、`IR-007a -> IR-001a -> IR-002a -> IR-003a`、`BE-001a`、`RT-002a` 与 `TC-001a` 已关闭；当前推进 target-aware `IR-004a/005a`。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request；resolver 已只语义消费 BuildPlan/toolchain/runtime manifests，产出 immutable `TargetContext`、LLVM TargetMachine 的权威 `DataLayout` 和 `AvailableCapabilityCatalog`。typed envelope 原样保留 HIR，首次 HIR/target provenance join 发生在 `RepresentationPlan`；structural MIR 之后再由 capability binding 产出 `BoundCapabilityClosure`。完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 real-LLVM 纵切反馈，MIR/backend 不得直接消费未解析 BuildPlan。
+`FE-012a`、`IR-007a -> IR-001a -> IR-002a -> IR-003a -> IR-004a/005a`、`BE-001a`、`RT-002a` 与 `TC-001a` 已关闭；当前推进 `IR-008a`，随后进入固定 ABI、real LLVM lowering、object/LLD 与 runner。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request；resolver 只语义消费 BuildPlan/toolchain/runtime manifests，产出 immutable `TargetContext`、LLVM TargetMachine 的权威 `DataLayout` 和 `AvailableCapabilityCatalog`。typed envelope 原样保留 HIR，首次 HIR/target provenance join 已在 `RepresentationPlan` 完成；capability binding 已从 structural target-aware MIR 产出显式空 `BoundCapabilityClosure`。完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 real-LLVM 纵切反馈，MIR/backend 不得直接消费未解析 BuildPlan。
 
 | ID | 当前状态 | 结果/退出条件 |
 | --- | --- | --- |
