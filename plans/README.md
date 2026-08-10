@@ -56,6 +56,7 @@ TypeScript source
 - `.d.ts` 只提供编译期声明，不等于目标产物存在实现；所有运行时调用必须通过版本化 capability manifest 和 ABI 闭包检查。
 - 目标 runtime 使用 Rust 编写并按 target/profile 预编译为一个 umbrella `staticlib`，内部 crates 使用 `rlib`；LLVM 生成代码只调用版本化 `extern "C"` ABI，最终由 LLD 链接，不依赖 Rust ABI 或跨版本 bitcode。
 - 标准库采用“Rust 原语 + 受限 TypeScript 自举算法 + 可选重型引擎适配”三层结构；泛型自举代码以已验证 Bingo HIR/package 分发并按需实例化。
+- 文档中的 `self-hosted`/“自举”仅指受限 TypeScript 标准库算法。编译器 driver、frontend integration 与 lowering 当前由 Go 实现，因此“编译器编译自身”不属于现有 Phase 2/RT-007 里程碑；若要实现，必须单独立项迁移编译器实现语言和 bootstrap seed。
 - 普通 TypeScript 对象允许循环引用，general static profile 默认使用非移动 tracing GC；ARC/arena 只能作为有额外可证明约束的受限 profile。
 - `Array<T>` 的可变元素默认不变，`ReadonlyArray<T>` 和只读字段才允许协变；tsgo 的历史兼容性结果不能直接当作 Bingo 布局安全证明。
 - `typescript-go` 的现行交付来自 `pqcqaq/typescript-go` 的固定 fork commit；lock 同时记录 reviewed Microsoft upstream ancestor，更新通过显式 upstream merge 与完整 compatibility gate。旧 patch/materialize/apply 机制已经退役，仅可作为标明已废弃的历史证据出现。

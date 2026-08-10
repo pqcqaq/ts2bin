@@ -289,4 +289,4 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - `IR-005a` 已关闭：独立 first-slice target-aware MIR 使用 `RepF64`/`fadd`，固化全部上游 provenance；structural/final verifier 验证 dense IDs、representation、return/effect 和内容 hash；capability binding 从 structural MIR 生成显式空 `BoundCapabilityClosure`。
 - canonical production pipeline 已真实执行全部 14 个 pass，两次相同输入的 final MIR 与逐 pass dump byte identity 稳定；现有 general MIR v1 verifier 保持独立，未被冒充为 first-slice target-aware verifier。
 - 验证通过：Windows `go test -p=1 ./... -count=1`、`go vet ./...`、checker-free dependency audit；WSL/LLVM 20 `go test -tags=llvm20 ./internal/bingomir ./internal/targetcontext ./internal/llvmbackend -count=1`。
-- 下一顺序固定为 `IR-008a -> RT-002b + BE-002a -> BE-004a -> REL-001a -> VERT-001 -> REL-002a`。`VERT-001` 是第一个 Linux x86-64 可执行文件；真实自举仍需 Phase 2B 的变量、调用、控制流、模块和最小 self-hosted stdlib contract。
+- 下一顺序固定为 `IR-008a -> RT-002b + BE-002a -> BE-004a -> REL-001a -> VERT-001 -> REL-002a`。`VERT-001` 是第一个 Linux x86-64 可执行文件；计划内的 self-hosted stdlib 仍需 Phase 2B 的变量、调用、控制流、模块和最小 stdlib contract。编译器主体是 Go，“编译器编译自身”不在当前路线中，不能与 stdlib self-hosting 混称。
