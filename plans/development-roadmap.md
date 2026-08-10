@@ -125,7 +125,7 @@ export function add(a: number, b: number): number { return a + b; }
 4. 实现 `as`、`satisfies`、non-null、nullish/optional chain 和 logical assignment 的单次求值消糖。
 5. 扩展 HIR/MIR verifier 的 dominance、phi、短路、cleanup/effect 规则；实现保序常量折叠，不做跨函数激进优化。
 
-第一条控制流纵切当前状态：`IR-001b/002b/003b` 与 `IR-004b/005b + BE-002b` 已关闭，`choose(flag, left, right)` 已从 validated snapshot 经 boolean/number HIR、三块 CFG、RepresentationPlan、i1/f64 MIR、严格 i8 ABI、真实 LLVM conditional branch/trap 生成 deterministic ELF object。下一项为 `RT-002c + REL-001b/002b + VERT-002`，把该 object 接入独立 runtime harness、进程执行和 Node true/false differential。
+第一条控制流纵切已关闭：`choose(flag, left, right)` 从 validated snapshot 经 boolean/number HIR、三块 CFG、RepresentationPlan、i1/f64 MIR、严格 i8 ABI 和真实 LLVM conditional branch/trap 生成 deterministic ELF；独立 harness 对 true/false 两支完成进程执行和 Node differential，并证明非 canonical byte 在 ABI 入口被进程拒绝。下一纵切扩展 local binding、赋值和 direct call，再以同一 runner 闭合 loop。
 
 ### 验收门槛
 

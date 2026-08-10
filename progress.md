@@ -348,3 +348,10 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - `FirstSliceMIRArtifact` 在保持 add JSON 兼容的前提下增加可选 successors；choose 生成 dense 三块 MIR，参数为 `i1/f64/f64`，entry 为直接 `condbranch`，两条 return 均为 f64；rehashed CFG/representation tamper 全部 fail closed。
 - WSL LLVM 20 真实 pipeline 两次执行的 MIR/LLVM/object identity 稳定；public `choose` ABI 为 `double choose(uint8_t flag, double left, double right)`，入口 `icmp ult flag, 2`，非法 byte 调用 `llvm.trap`，合法 byte `trunc` 为 i1 后分支；VerifyModule 与 ELF object 通过。
 - 下一项为 `RT-002c + REL-001b/002b + VERT-002`：runtime C header/harness、true/false 进程执行、非 canonical byte 拒绝及 Node differential/report provenance。
+
+## 2026-08-11 Phase 2B RT-002c + REL-001b/002b + VERT-002 完成
+
+- fork commit `eb98a14d4b215a821a235fdb497471db0459d366` 扩展 ABI v1 生成器的 `u8 -> uint8_t`，保留 add harness 并新增独立 `bingo_choose_harness.o`；runtime manifest 同时认证两个 harness，重复构建 manifest byte identity 一致。
+- `choose-boolean-number` 独立 case 显式绑定 entry point 和 boolean flag；linker 从已验证 LLVM entry point 选择 manifest-authenticated harness，true/false 两支与锁定 Node 22.22.0 oracle 一致。
+- strict ABI negative 会以 `0x02` 调用真实 ELF；LLVM 入口 trap 使进程失败且无输出，arguments/output hash 和全部 snapshot/HIR/MIR/LLVM/object/link/executable hashes 进入 canonical report。
+- Windows 串行全仓 `go test -p=1 ./... -count=1`、全仓 `go vet -p=1 ./...`、WSL LLVM 20 choose pipeline/runner、Rust workspace lib tests 和双 runtime build manifest identity 通过；WSL 缺少 `rustfmt`/`rustdoc`，format/doctest 未执行，保持为环境项。下一纵切为 local binding/assignment + direct call。

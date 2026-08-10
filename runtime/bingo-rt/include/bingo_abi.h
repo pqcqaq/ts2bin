@@ -14,6 +14,7 @@ extern "C" {
 uint32_t bingo_rt_abi_version_v1(void);
 void bingo_startup_empty_v1(void);
 double add(double left, double right);
+double choose(uint8_t flag, double left, double right);
 
 #ifdef __cplusplus
 }

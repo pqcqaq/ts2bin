@@ -149,7 +149,7 @@
 | `IR-004a/005a` | complete | RepresentationPlan 已首次 join HIR/BuildPlan/TargetContext provenance；target-aware 单 block f64 MIR、structural/final verifier 与显式空 add BoundCapabilityClosure 已由 LLVM 20 end-to-end pass pipeline 验证 |
 | `IR-008a` | complete | 为已验证 first-slice HIR/MIR 提供 canonical JSON/text emit、schema-aware diff、显式 case manifest 与 verify CLI；Linux LLVM 20 与 Windows fail-closed 验收通过 |
 | `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | complete | 固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential 已通过真实 CLI 验收 |
-| Phase 2B: primitive control flow | in progress | `IR-007b`、`IR-001b/002b/003b` 与 `IR-004b/005b + BE-002b` 已关闭：`choose(flag, left, right)` 已完成 snapshot-only 三块 HIR/CFG、boolean/i1 + number/f64 target-aware MIR 和严格 uint8 ABI 的真实 LLVM/object lowering；下一步完成 runtime harness、真实 ELF process 与 Node differential，再扩变量、调用、loop、string/null/undefined 和单次求值消糖 |
+| Phase 2B: primitive control flow | in progress | `IR-007b` 到 `RT-002c + REL-001b/002b + VERT-002` 已关闭：`choose(flag, left, right)` 完成 snapshot/HIR/MIR/LLVM/object/harness/process/Node 全链，并拒绝非 canonical boolean byte；下一步扩 local binding/assignment 与 direct call，再做 loop、string/null/undefined 和单次求值消糖 |
 | `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |
 | Broad Phase 2+ | blocked | 第一真实纵切通过后再扩对象/runtime/modules/generics/EH/async/第二目标 |
 

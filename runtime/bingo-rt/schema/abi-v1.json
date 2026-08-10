@@ -23,6 +23,16 @@
         {"name": "right", "type": "f64"}
       ],
       "implementation": "program"
+    },
+    {
+      "name": "choose",
+      "returnType": "f64",
+      "parameters": [
+        {"name": "flag", "type": "u8"},
+        {"name": "left", "type": "f64"},
+        {"name": "right", "type": "f64"}
+      ],
+      "implementation": "program"
     }
   ]
 }
