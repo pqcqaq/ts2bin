@@ -138,6 +138,7 @@ ts2bin test --stage frontend
 | `TC-001a` | FE-011b, BE-001a, RT-002a | resolver 只语义消费 canonical BuildPlan 与 toolchain/runtime manifests，用 typed input/output envelope（canonical bytes + digest，不是 fact 标签）绑定 immutable TargetContext + authoritative DataLayout + AvailableCapabilityCatalog，并不可变保留 HIR 供下一 pass join；首切只接受显式 Linux x86-64、LLVM 20、generic CPU、no-EH 和锁定 runtime，其余 fail closed；测试 non-empty available catalog 与后续 empty add bound closure 可并存 |
 | `IR-004a` | IR-003a, TC-001a | RepresentationPlan join pre-verifier 同时消费 verified HIR、BuildPlan 与 resolver envelope，核对 HIR FrontendSnapshotHash == BuildPlan.FrontendHash 及 context/request hashes 后，才降为 target-aware 单 block MIR；无 placeholder store/phi/call |
 | `IR-005a` | IR-004a | MIR artifact 固化 HIR/BuildPlan/CompilerBuildIdentity/TargetContext/DataLayout/catalog/logical requirement provenance；verifier 独立验证 dense/unique IDs（含 module-level duplicate FunctionID）、RepType/DataLayout、return/effect/provenance/capability，并从 structural MIR 生成精确 BoundCapabilityClosure；malformed MIR 不进入 backend |
+| `IR-008a` | IR-003a, IR-005a | first-slice HIR/MIR canonical JSON/text serialization、schema-aware diff 与 `emit-hir --verify` / `emit-mir --verify` CLI；只消费已验证 artifact，明确拥有 P2A 的两条 IR 输出验收命令，不提前承诺完整 IR-008 |
 | `RT-002b` | RT-002a, IR-005a, TC-001a | 绑定 first-slice C ABI/artifact identity；生成函数固定为 `extern "C" double add(double,double)`，startup/harness 以 IEEE-754 bits 输入/输出，不含对象、GC 或 EH helper |
 | `BE-002a` | BE-001a, IR-005a, TC-001a | 只把 verified number-add MIR 降为 real LLVM，并通过 VerifyModule/object emission；不得直接消费未绑定 BuildPlan |
 
@@ -146,10 +147,10 @@ typed HIR 之后的 canonical pass handlers 与这些子任务同步实现。不
 阶段退出命令目标：
 
 ```text
-go test ./internal/bingo/...
-ts2bin emit-hir --verify testdata/ts2bin/lowering
-ts2bin emit-mir --verify testdata/ts2bin/lowering
-ts2bin test --stage static-core
+go test ./internal/bingo/...                 # IR-008a / IR core gate
+ts2bin emit-hir --verify testdata/ts2bin/lowering # IR-008a
+ts2bin emit-mir --verify testdata/ts2bin/lowering # IR-008a
+ts2bin test --stage static-core               # REL-001a
 ```
 
 ## 5. 布局、对象与方差
@@ -204,7 +205,7 @@ ts2bin test --stage static-core
 | `BE-003` | object/closure/Rust runtime/EH lowering | BE-002, OBJ-003, EH-001, ADV-001 | status/exception、GC root 和版本化 C ABI contract 的 link/run 测试 |
 | `BE-004` | TargetMachine、object、Rust archive 选择、LLD linker 和跨目标 data layout | BE-003, RT-002 | deterministic response file；x86-64 Linux + 第二目标运行；错误 target/ABI 有 doctor 诊断 |
 | `BE-005` | snapshot/HIR/MIR/LLVM 增量 cache | FE-007, IR-008, BE-002 | provenance key 包含 upstream commit、fork commit、lowering schema/compiler build identity、TargetContext 与 runtime/ABI/layout hashes；缺字段只能 cache miss |
-| `REL-001a` | first-slice case-runner core | FE-005, FE-010a, IR-005a, BE-004a | 单个 `add` case 可隔离、超时、乱序执行并记录 snapshot/HIR/MIR/LLVM/object/executable/output provenance；无需先完成全 handbook release coverage |
+| `REL-001a` | first-slice case-runner core | FE-005, FE-010a, IR-005a, IR-008a, BE-004a | 单个 `add` case 可隔离、超时、乱序执行并记录 snapshot/HIR/MIR/LLVM/object/executable/output provenance；拥有 `test --stage static-core` 阶段门禁；无需先完成全 handbook release coverage |
 | `VERT-001` | Linux x86-64 real-LLVM executable vertical slice (`add(number, number)`) | FND-004a, FE-008a, FE-009a, FE-010a, FE-011a, FE-011b, FE-012a, IR-000a, TC-001a, IR-005a, RT-002b, BE-004a, REL-001a | case runner 执行 validated serialized snapshot-only lowering -> HIR verifier -> resolver/RepresentationPlan join -> MIR verifier -> real LLVM -> object -> LLD -> run；由固定 C ABI harness 输出 IEEE-754 bits，不含对象、GC、EH、字符串 |
 | `REL-002a` | First-slice Node oracle differential harness | VERT-001, REL-001a | `add` source/snapshot/HIR/MIR/output manifest 与 Node oracle 差分；capture/replay 不依赖 AST/checker |
 | `REL-001` | 完整 case manifest runner、精确 diagnostic/artifact/oracle 执行与 handbook/AST 覆盖报告 | REL-001a, IR-008, BE-004 | case 可独立/乱序/超时执行；code/stage/span/profile/multiplicity/capability 精确比较；17 章和所有矩阵 R 规则可追溯 |
@@ -220,8 +221,8 @@ ts2bin test --stage static-core
 1. `[complete] FE-008a/009a/010a/011a/011b`、`IR-000a`：lowering-complete snapshot、语义 proof、snapshot-only replay、truthful target/profile provenance 和唯一 pass contract 已冻结。
 2. `[complete] FND-004a`：`pqcqaq/typescript-go` fork remote、fork commit、reviewed upstream ancestor、parent gitlink/lock 和 fork verification/merge scripts 已落盘；本地 doctor、frontend/全仓回归、隔离 fork test/vet、replay 双构建、远端 fork fetch/full test/vet 和 committed parent HEAD clean-clone 均已通过。旧 patch/materialize/apply 机制不再是交付路径。
 3. `[complete] FE-012a, IR-007a/001a/002a/003a`：validated-input、number contract、HIR v2/compiler identity/logical requirements 与 number-only verifier 已冻结。下一步仅并行推进 `BE-001a`、`RT-002a`，建立 TargetMachine/DataLayout 与 Rust workspace/startup/manifests。
-4. `BE-001a + RT-002a + BuildPlan -> TC-001a`：resolver 只解析请求/manifests，产出 immutable TargetContext、authoritative DataLayout 和 AvailableCapabilityCatalog；`RepresentationPlan` 再首次 join verified HIR。只有之后 `IR-004a/005a` 才实现 target-aware MIR、BoundCapabilityClosure 与真正 verifier，随后由 `RT-002b`、`BE-002a/004a` 完成固定 C ABI、真实 LLVM、object 和 LLD 链接能力。
-5. `REL-001a`：只建立首切需要的隔离/超时 case-runner core，并精确记录 snapshot/HIR/MIR/LLVM/object/output provenance；完整 handbook/diagnostic runner 留给 `REL-001`。
+4. `BE-001a + RT-002a + BuildPlan -> TC-001a`：resolver 只解析请求/manifests，产出 immutable TargetContext、authoritative DataLayout 和 AvailableCapabilityCatalog；`RepresentationPlan` 再首次 join verified HIR。只有之后 `IR-004a/005a` 才实现 target-aware MIR、BoundCapabilityClosure 与真正 verifier；`IR-008a` 随后提供只消费 verified artifact 的 first-slice HIR/MIR 输出、验证与 diff CLI。再由 `RT-002b`、`BE-002a/004a` 完成固定 C ABI、真实 LLVM、object 和 LLD 链接能力。
+5. `REL-001a`：依赖 `IR-008a` 与 `BE-004a`，只建立首切需要的隔离/超时 case-runner core，拥有 `test --stage static-core`，并精确记录 snapshot/HIR/MIR/LLVM/object/output provenance；完整 handbook/diagnostic runner 留给 `REL-001`。
 6. `VERT-001`、`REL-002a`：由统一 runner 执行 Linux `add` 可执行纵切，再与 Node oracle 差分。
 
 此纵切明确延后对象、字符串、GC、EH、async、模块、dynamic、Proxy、WeakRef/finalization、self-hosted stdlib、ARC/arena、`no_std`、Windows native EH、statepoint/LTO 和第二目标；它先验证最容易返工的前端快照、IR、LLVM、链接和可复现执行边界。

@@ -1,6 +1,6 @@
 # ts2bin
 
-`ts2bin` is a TypeScript-to-native compiler project built around `typescript-go`, a target-independent frontend wire snapshot, Bingo typed HIR, target-aware MIR, LLVM, and a Rust C ABI runtime. The executable boundary is `FrontendSnapshot -> typed HIR`; `BuildPlan + manifests -> ResolveTargetContext`; then `RepresentationPlan -> target-aware MIR -> LLVM/link`. The direction audit kept that architecture and added a Phase 1.5 lowering-contract gate. The Phase 1.5 implementation contracts and Phase 2A entry contracts (`FE-012a`, `IR-007a`, `IR-001a..003a`) are complete; local pinned-fork gates pass, while delivery acceptance (`FND-004a`) remains blocked on remote fork publication/verification and a committed-parent clean clone. The next work is the parallel LLVM TargetMachine/DataLayout and Rust runtime-manifest scaffolds. Broad syntax expansion stays blocked until the number-only real-LLVM slice passes. See [the audit](plans/development-audit-2026-08-05.md) and [implementation backlog](plans/implementation-backlog.md).
+`ts2bin` is a TypeScript-to-native compiler project built around `typescript-go`, a target-independent frontend wire snapshot, Bingo typed HIR, target-aware MIR, LLVM, and a Rust C ABI runtime. The executable boundary is `FrontendSnapshot -> typed HIR`; `BuildPlan + manifests -> ResolveTargetContext`; then `RepresentationPlan -> target-aware MIR -> LLVM/link`. The direction audit kept that architecture and added a Phase 1.5 lowering-contract gate. The Phase 1.5 implementation contracts and Phase 2A entry contracts (`FE-012a`, `IR-007a`, `IR-001a..003a`) are complete; delivery acceptance (`FND-004a`) is complete on the pinned fork and committed parent gitlink. P2A preparation now includes a non-bypassable frontend gate, cross-platform doctor, and parent-repository CI. The next work is the parallel LLVM TargetMachine/DataLayout and Rust runtime-manifest scaffolds. Broad syntax expansion stays blocked until the number-only real-LLVM slice passes. See [the audit](plans/development-audit-2026-08-05.md) and [implementation backlog](plans/implementation-backlog.md).
 
 ## Locked Toolchain
 
@@ -14,6 +14,13 @@ Check the current machine from PowerShell:
 
 ```powershell
 .\scripts\doctor.ps1
+```
+
+Check a Linux or WSL environment with the same lock, fork, provenance, and
+stdlib closure rules:
+
+```bash
+./scripts/doctor.sh
 ```
 
 Bootstrap or repair the WSL toolchain without a proxy:
