@@ -160,8 +160,8 @@ Phase 2B 继续按可执行纵切关闭，不能一次性把完整 `IR-001..008`
 | --- | --- | --- | --- |
 | `IR-007b` | `complete` | IR-007a, VERT-001 | boolean contract 固定 canonical `i1` MIR 表示、C ABI `uint8_t` 且只接受 0/1、直接 i1 condition branch、禁止与 number 隐式互转；唯一 primitive representation mapping 与 alternative-contract negative tests 通过。 |
 | `IR-001b/002b/003b` | `complete` | IR-007b, REL-002a | snapshot-only `choose` 已生成 boolean parameter 与三块 condbranch HIR；独立 Phase 2B verifier 证明 dense IDs、type、successor、reachability、dominance 和 return，旧 Phase 2A verifier 保持冻结；source/HIR/event 重哈希篡改全部拒绝。 |
-| `IR-004b/005b + BE-002b` | `ready` | IR-001b/002b/003b | RepresentationPlan 同时绑定 number/f64 与 boolean/i1；target-aware MIR/LLVM 生成可验证基本 CFG，malformed MIR 不到达 backend。 |
-| `RT-002c + REL-001b/002b + VERT-002` | `pending` | IR-004b/005b, BE-002b | C ABI 以 `uint8_t` 传递 flag 并严格拒绝非 0/1；真实 ELF 对 true/false 两支执行并与锁定 Node oracle 一致，全部 artifact/output provenance 进入 canonical report。 |
+| `IR-004b/005b + BE-002b` | `complete` | IR-001b/002b/003b | RepresentationPlan 已按 HIR 实际类型绑定 number/f64 与 boolean/i1；choose 生成三块 target-aware MIR，verifier 复验 CFG/类型/hash，LLVM 生成严格 i8 ABI 入口、i1 branch、trap 和 deterministic ELF object；malformed MIR 不到达 backend。 |
+| `RT-002c + REL-001b/002b + VERT-002` | `ready` | IR-004b/005b, BE-002b | C ABI 以 `uint8_t` 传递 flag 并严格拒绝非 0/1；真实 ELF 对 true/false 两支执行并与锁定 Node oracle 一致，全部 artifact/output provenance 进入 canonical report。 |
 
 阶段退出命令目标：
 

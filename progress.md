@@ -341,3 +341,10 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - verifier 覆盖 dense ValueID/BlockID、successor、reachability、dominance、condition/return type，并拒绝重算 hash 后的 parameter/condition/successor/return/event 篡改；source `if` child-role/type 篡改在产生 HIR 前 fail closed。
 - 修复 test-only snapshot clone 的嵌套 slice 浅拷贝，消除子测试共享 DTO 的顺序污染；定向、shuffle、race、相关 HIR/MIR/CLI 包 test/vet 与 `git diff --check` 通过。
 - 下一项固定为 `IR-004b/005b + BE-002b`：RepresentationPlan 同时绑定 boolean/i1 与 number/f64，生成并验证三块 target-aware MIR 和真实 LLVM conditional branch。
+
+## 2026-08-11 Phase 2B IR-004b/005b + BE-002b 完成
+
+- fork commit `376f0b23e0b98f4a34d4c6ee48dbf8dee82f3386` 将 canonical HIR 的实际 primitive 类型绑定为 `[boolean/i1, number/f64]` RepresentationPlan；number-only plan 仍保持原 artifact bytes，未使用的额外 binding 会被 lowering 拒绝。
+- `FirstSliceMIRArtifact` 在保持 add JSON 兼容的前提下增加可选 successors；choose 生成 dense 三块 MIR，参数为 `i1/f64/f64`，entry 为直接 `condbranch`，两条 return 均为 f64；rehashed CFG/representation tamper 全部 fail closed。
+- WSL LLVM 20 真实 pipeline 两次执行的 MIR/LLVM/object identity 稳定；public `choose` ABI 为 `double choose(uint8_t flag, double left, double right)`，入口 `icmp ult flag, 2`，非法 byte 调用 `llvm.trap`，合法 byte `trunc` 为 i1 后分支；VerifyModule 与 ELF object 通过。
+- 下一项为 `RT-002c + REL-001b/002b + VERT-002`：runtime C header/harness、true/false 进程执行、非 canonical byte 拒绝及 Node differential/report provenance。
