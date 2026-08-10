@@ -126,7 +126,7 @@
 
 ## Phase 1.5 与调整后主链（2026-08-06）
 
-`FE-012a`、`IR-007a -> IR-001a -> IR-002a -> IR-003a`、`BE-001a` 与 `RT-002a` 已关闭；当前只推进 `TC-001a`，完成 BuildPlan、LLVM toolchain manifest 与 Rust runtime manifest 的真实解析后，才进入 target-aware `IR-004a/005a`。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request；resolver 只语义消费 BuildPlan/toolchain/runtime manifests，产出 immutable `TargetContext`、LLVM TargetMachine 的权威 `DataLayout` 和 `AvailableCapabilityCatalog`。typed envelope 原样保留 HIR，首次 HIR/target provenance join 发生在 `RepresentationPlan`；structural MIR 之后再由 capability binding 产出 `BoundCapabilityClosure`。完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 real-LLVM 纵切反馈，MIR/backend 不得直接消费未解析 BuildPlan。
+`FE-012a`、`IR-007a -> IR-001a -> IR-002a -> IR-003a`、`BE-001a`、`RT-002a` 与 `TC-001a` 已关闭；当前推进 target-aware `IR-004a/005a`。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request；resolver 已只语义消费 BuildPlan/toolchain/runtime manifests，产出 immutable `TargetContext`、LLVM TargetMachine 的权威 `DataLayout` 和 `AvailableCapabilityCatalog`。typed envelope 原样保留 HIR，首次 HIR/target provenance join 发生在 `RepresentationPlan`；structural MIR 之后再由 capability binding 产出 `BoundCapabilityClosure`。完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 real-LLVM 纵切反馈，MIR/backend 不得直接消费未解析 BuildPlan。
 
 | ID | 当前状态 | 结果/退出条件 |
 | --- | --- | --- |
@@ -145,8 +145,8 @@
 | `IR-001a/002a/003a` | complete | HIR major 2、完整 `CompilerBuildIdentity`、identity-free source plan、logical requirements、number-only canonical lowering 与 schema/ID/type/effect/origin/terminator/provenance/capability/CFG negative tests已闭合；lock 的 `bingoIR` 已升为 2 |
 | Typed artifact envelope substrate | complete | `PassArtifactEnvelope` 已提供 role/schema/payload-bound canonical digest、immutability 与 executor transition checks；resolver 不把 HIR误列为语义输入，RepresentationPlan 才声明首次 join；这只是 `TC-001a` 基础设施 |
 | `BE-001a`, `RT-002a` | complete | Go-LLVM 20.1.8 TargetMachine/DataLayout 与 deterministic ELF object emission 已闭合；Rust 1.97.1 workspace、ABI schema、empty startup、唯一 umbrella staticlib、runtime manifest 与重复构建 byte identity 已闭合 |
-| `TC-001a` | ready | 真实 toolchain/runtime manifests 与 unresolved BuildPlan 已齐备；下一步只实现 resolver 输出 immutable TargetContext、authoritative DataLayout 与 AvailableCapabilityCatalog |
-| `IR-004a/005a` | blocked | 等待 `TC-001a`；随后由 RepresentationPlan 首次 join HIR/target provenance，再实现 target-aware MIR verifier 与 BoundCapabilityClosure |
+| `TC-001a` | complete | resolver 只读取 BuildPlan/toolchain/runtime manifests；生产 handler 绑定真实 TargetMachine，输出 immutable TargetContext、authoritative DataLayout 与非空 AvailableCapabilityCatalog，并原样保留 opaque HIR sidecar |
+| `IR-004a/005a` | ready | 当前由 RepresentationPlan 首次 join HIR/BuildPlan/TargetContext provenance，再实现 target-aware 单 block MIR、structural/final verifier 与空 add BoundCapabilityClosure |
 | `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | blocked | 等待 verified target-aware MIR，再完成固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential |
 | Phase 2B: primitive control flow | blocked | Phase 2A 通过后再扩 bool、变量、调用、CFG、string/null/undefined 和单次求值消糖 |
 | `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |
