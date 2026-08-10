@@ -125,7 +125,7 @@ export function add(a: number, b: number): number { return a + b; }
 4. 实现 `as`、`satisfies`、non-null、nullish/optional chain 和 logical assignment 的单次求值消糖。
 5. 扩展 HIR/MIR verifier 的 dominance、phi、短路、cleanup/effect 规则；实现保序常量折叠，不做跨函数激进优化。
 
-前三条 Phase 2B 可执行纵切已关闭：`choose(flag, left, right)` 证明 boolean/number HIR、三块 CFG、i1/f64 MIR、严格 i8 ABI 与真实 LLVM conditional branch；`calllocal` 证明 SSA local bind/assign、签名绑定 direct call、多函数 HIR/MIR 与 internal-linkage LLVM helper；`loop` 证明 `while` source proof、`<` lowering、general CFG、显式 incoming edge、loop-carried phi 与 back edge。三者均由 deterministic ELF 独立进程执行并与锁定 Node oracle 差分，malformed source/HIR/MIR/CFG/phi 在 LLVM 前 fail closed。下一纵切固定 string/nullish representation，随后进入 optional/nullish/logical assignment 的单次求值消糖；这不表示整个 Phase 2B 已完成。
+四条 Phase 2B 可执行纵切已关闭：`choose(flag, left, right)` 证明 boolean/number HIR、三块 CFG、i1/f64 MIR、严格 i8 ABI 与真实 LLVM conditional branch；`calllocal` 证明 SSA local bind/assign、签名绑定 direct call、多函数 HIR/MIR 与 internal-linkage LLVM helper；`loop` 证明 `while` source proof、`<` lowering、general CFG、显式 incoming edge、loop-carried phi 与 back edge；`coalesce(value: number | null | undefined, fallback: number)` 证明 nullable-number 16-byte ABI、`null`/`undefined` distinct tags、nullish payload canonicalization、guarded unwrap 与 phi。四者均由 deterministic ELF 独立进程执行并与锁定 Node oracle 差分，malformed source/HIR/MIR/CFG/phi/tag 在 LLVM 前或 ABI 入口 fail closed。下一纵切是 optional/nullish/logical assignment 的单次求值消糖；string ownership/GC、模块和完整 stdlib 仍在后续阶段，这不表示整个 Phase 2B 已完成。
 
 ### 验收门槛
 

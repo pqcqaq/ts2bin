@@ -51,6 +51,7 @@ def main():
     parser.add_argument("--harness", type=Path, required=True)
     parser.add_argument("--compute-harness", type=Path, required=True)
     parser.add_argument("--choose-harness", type=Path, required=True)
+    parser.add_argument("--coalesce-harness", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args()
     target_manifest_path = ROOT / "manifests" / "first-slice-target.json"
@@ -62,23 +63,26 @@ def main():
     expected_harness = manifest.pop("harnessObject")
     expected_compute_harness = manifest.pop("computeHarnessObject")
     expected_choose_harness = manifest.pop("chooseHarnessObject")
+    expected_coalesce_harness = manifest.pop("coalesceHarnessObject")
     if (
         arguments.archive.name != expected_archive
         or arguments.startup.name != expected_startup
         or arguments.harness.name != expected_harness
         or arguments.compute_harness.name != expected_compute_harness
         or arguments.choose_harness.name != expected_choose_harness
+        or arguments.coalesce_harness.name != expected_coalesce_harness
     ):
         raise SystemExit(
             "artifact names do not match target manifest: "
             f"archive={arguments.archive.name}, startup={arguments.startup.name}, "
-            f"harness={arguments.harness.name}, computeHarness={arguments.compute_harness.name}, chooseHarness={arguments.choose_harness.name}"
+            f"harness={arguments.harness.name}, computeHarness={arguments.compute_harness.name}, chooseHarness={arguments.choose_harness.name}, coalesceHarness={arguments.coalesce_harness.name}"
         )
     archive_hash = sha256_file(arguments.archive)
     startup_hash = sha256_file(arguments.startup)
     harness_hash = sha256_file(arguments.harness)
     compute_harness_hash = sha256_file(arguments.compute_harness)
     choose_harness_hash = sha256_file(arguments.choose_harness)
+    coalesce_harness_hash = sha256_file(arguments.coalesce_harness)
     for capability in manifest["capabilities"]:
         capability["signatureHash"] = canonical_hash(capability["signature"])
         capability["implementationHash"] = archive_hash
@@ -88,6 +92,7 @@ def main():
         "harnessObject": {"file": arguments.harness.name, "sha256": harness_hash, "bytes": arguments.harness.stat().st_size},
         "computeHarnessObject": {"file": arguments.compute_harness.name, "sha256": compute_harness_hash, "bytes": arguments.compute_harness.stat().st_size},
         "chooseHarnessObject": {"file": arguments.choose_harness.name, "sha256": choose_harness_hash, "bytes": arguments.choose_harness.stat().st_size},
+        "coalesceHarnessObject": {"file": arguments.coalesce_harness.name, "sha256": coalesce_harness_hash, "bytes": arguments.coalesce_harness.stat().st_size},
     }
     manifest["abiSchemaHash"] = sha256_file(abi_schema_path)
     manifest["targetManifestHash"] = sha256_file(target_manifest_path)

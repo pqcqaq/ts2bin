@@ -4,6 +4,12 @@
 
 #include <stdint.h>
 
+typedef struct BingoNullableNumber {
+    uint8_t tag;
+    uint8_t reserved[7];
+    double payload;
+} BingoNullableNumber;
+
 #define BINGO_ABI_SCHEMA_VERSION 1u
 #define BINGO_RUNTIME_ABI_VERSION 1u
 
@@ -15,6 +21,7 @@ uint32_t bingo_rt_abi_version_v1(void);
 void bingo_startup_empty_v1(void);
 double add(double left, double right);
 double choose(uint8_t flag, double left, double right);
+double coalesce(BingoNullableNumber value, double fallback);
 
 #ifdef __cplusplus
 }

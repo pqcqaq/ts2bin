@@ -369,3 +369,10 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - `testdata/ts2bin/loop` 从真实 validated snapshot 生成 `while (value < limit)` 的 header/body/exit CFG、loop-carried phi、`fcmp olt` 与 back edge；source/HIR/MIR tamper 和 malformed CFG/phi 在 backend 前拒绝。
 - Windows 定向 Go 包、WSL LLVM 20 backend/MIR/runner tests 通过；真实 deterministic ELF 对多次 back edge、overshoot、`-0` 和 NaN-condition-false 四组 binary64 输入与 Node 22.22.0 一致。
 - Phase 2B 仍为 in progress。下一纵切为 string/nullish representation 与 ABI，随后实现 optional/nullish/logical assignment 的单次求值消糖。编译器本体仍由 Go 实现，不属于现行 self-hosted stdlib 或 compiler-bootstrap 里程碑。
+
+## 2026-08-11 Phase 2B nullable-number coalesce 完成
+
+- fork commit `db79bea025937896843049558fd3eb99e9dfd68c` 新增受限 `coalesce(value: number | null | undefined, fallback: number): number` 纵切；HIR 升为 v5，target-aware MIR 升为 v3。
+- ABI 固定为 16-byte `{i8 tag, [7 x i8] padding, f64 payload}`：tag `0/1/2` 分别表示 number/null/undefined；nullish payload 必须为零，未知 tag 在 LLVM ABI 入口 trap。HIR/MIR verifier 和 case manifest 都拒绝未证明 unwrap、非 canonical tag/payload。
+- runtime manifest、C harness、LLVM 20、LLD、Linux ELF、Node 22 对拍均已通过；执行覆盖普通 number、`-0`、NaN、null、undefined 以及非法 tag `03`。
+- Phase 2B 仍为 in progress。下一项是 optional/nullish/logical assignment 的单次求值消糖；string ownership/GC 和模块、完整 stdlib 仍在后续阶段。编译器主体是 Go，不把受限程序可执行误称为 compiler self-bootstrap。
