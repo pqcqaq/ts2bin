@@ -24,6 +24,8 @@ extern "C" {
 
 uint32_t bingo_rt_abi_version_v1(void);
 void bingo_startup_empty_v1(void);
+uint32_t bingo_application_startup_v1(void);
+double bingo_program_main_v1(void);
 double add(double left, double right);
 double choose(uint8_t flag, double left, double right);
 double classify(double value);

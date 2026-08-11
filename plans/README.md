@@ -60,7 +60,7 @@ TypeScript source
 - 普通 TypeScript 对象允许循环引用，general static profile 默认使用非移动 tracing GC；ARC/arena 只能作为有额外可证明约束的受限 profile。
 - `Array<T>` 的可变元素默认不变，`ReadonlyArray<T>` 和只读字段才允许协变；tsgo 的历史兼容性结果不能直接当作 Bingo 布局安全证明。
 - `typescript-go` 的现行交付来自 `pqcqaq/typescript-go` 的固定 fork commit；lock 同时记录 reviewed Microsoft upstream ancestor，更新通过显式 upstream merge 与完整 compatibility gate。旧 patch/materialize/apply 机制已经退役，仅可作为标明已废弃的历史证据出现。
-- Phase 1.5 与 Phase 2A 已关闭；Phase 2B 已完成 `choose`、`classify`、`calllocal`、`loop`、`coalesce`、local `coalesceAssign` 和 borrowed UTF-16 `stringLength` 七条真实 LLVM/object/LLD/进程/Node 纵切，当前 HIR/MIR schema 为 v7/v5。完整 property/computed-key/getter/optional-chain 单次求值仍依赖 Phase 3 object/place contract；通用 `ts2bin build` 仍未实现，Phase 2B 退出前先交付明确受限的 application entrypoint/build preview。owned string、GC、对象、EH、async、模块、完整 self-hosted stdlib 和第二目标仍按后续阶段边界 blocked。
+- Phase 1.5、Phase 2A 与 scoped Phase 2B static-core milestone 已关闭；除七条 fixture 纵切外，`APP-001 + CLI-001 + VERT-009` 已让真实 source project 通过 HIR v8/MIR v6、LLVM/object/LLD 生成 deterministic Linux x86-64 ELF 与相邻 provenance report。该 preview 只接受唯一 exported parameterless `main(): number` 返回 `0..255` canonical integer literal，不是 Phase 6 通用 backend。完整 property/computed-key/getter/optional-chain 单次求值仍依赖 Phase 3 object/place contract；owned string、GC、对象、EH、async、模块、完整 self-hosted stdlib 和第二目标仍按后续阶段边界 blocked。
 
 ## 交付物与唯一事实来源
 

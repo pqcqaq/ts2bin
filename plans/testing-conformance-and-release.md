@@ -257,7 +257,7 @@ ts2bin snapshot    # typed snapshot
 ts2bin emit-hir    # HIR text/binary
 ts2bin emit-mir    # MIR + verifier
 ts2bin emit-llvm   # LLVM textual/bitcode
-ts2bin build       # planned APP-001/CLI-001 preview; not implemented yet
+ts2bin build       # restricted APP-001/CLI-001 Linux x86-64 preview
 ts2bin test        # case manifest runner
 ts2bin doctor      # tsgo/LLVM/runtime capability audit
 ```
@@ -278,8 +278,8 @@ P0  [complete] Phase 2A: FE-012a + IR-007a/001a/002a/003a
     || [complete] BE-001a || RT-002a
     -> TC-001a -> IR-004a/005a
     -> RT-002b + BE-002a/004a -> REL-001a -> VERT-001 -> REL-002a
-P1  [ready] Phase 2B: full IR-001..008 primitive/control-flow contracts
-P2  OBJ/MOD/RT/GC/EH/ADV feature groups in backlog dependency order
+P1  [complete, scoped] Phase 2B: seven primitive/static-core fixtures + APP-001/CLI-001/VERT-009
+P2  [ready] Phase 3 object/place/closure/variance, including deferred full IR-006 property evaluation
 P3  full BE/REL productization, second target, broad fuzz/performance/release matrices
 ```
 

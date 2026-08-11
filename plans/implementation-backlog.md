@@ -105,7 +105,7 @@ ts2bin test --stage frontend
 | `REL-001a`, `VERT-001` | `complete` | `test --stage static-core` 固定运行 checked-in first-slice manifest，在单 case timeout 内执行 snapshot-only HIR/MIR、LLVM/object/LLD/process；canonical report 绑定 compiler identity 与全部 artifact/output hashes。 |
 | `REL-002a` | `complete` | runner 锁定 Node 22.22.0 与 oracle script hash；普通值、`-0`、canonical qNaN 三组结果在 expected/native executable/Node 三方一致，report schema 2 绑定 Node output hashes。 |
 
-`FE-008a/009a/010a/011a/011b/012a`、`IR-000a/007a/001a/002a/003a/004a/005a/008a`、`FND-004a`、`BE-001a/002a/004a`、`RT-002a/002b`、`TC-001a`、`REL-001a`、`VERT-001` 与 `REL-002a` 的实现及交付验收均已关闭。Phase 2A 已退出，当前进入 Phase 2B 的 primitive/control-flow contracts。
+`FE-008a/009a/010a/011a/011b/012a`、`IR-000a/007a/001a/002a/003a/004a/005a/008a`、`FND-004a`、`BE-001a/002a/004a`、`RT-002a/002b`、`TC-001a`、`REL-001a`、`VERT-001` 与 `REL-002a` 的实现及交付验收均已关闭。Phase 2A 已退出；其后的 scoped Phase 2B primitive/static-core closure 状态见 4.2 节。
 
 | 子任务 | 必须交付的关闭证据 |
 | --- | --- |
@@ -165,7 +165,7 @@ Phase 2B 继续按可执行纵切关闭，不能一次性把完整 `IR-001..008`
 | `IR-001c/002c/003c + BE-002c + REL-002c + VERT-003` | `complete` | VERT-002 | `calllocal` 真实 snapshot 生成 internal `add` 与 exported `compute`；SSA local bind/assign、签名绑定 direct call、多函数 HIR/MIR verifier、internal-linkage LLVM helper、独立 compute harness、真实 ELF 与 Node 22.22.0 differential 通过。 |
 | `IR-001d/002d/003d/004d/005d + BE-002d + REL-002d + VERT-004` | `complete` | VERT-003 | `loop` 真实 snapshot 生成 `while`、`<`、header/body/exit CFG 与 loop-carried value；HIR v4/MIR v2 显式保存 incoming block，phi verifier 按入边验证定义支配并接受 back edge；LLVM 20 生成真实 phi、`fcmp olt`、back edge 和 exit，四组 binary64 输入与锁定 Node oracle 一致。 |
 
-`IR-001e/002e/003e + IR-004e/005e + RT-002d + REL-001c/002d + VERT-005` 的 nullable-number coalesce 纵切已完成：HIR v5/MIR v3 固定 16-byte nullable ABI、distinct null/undefined tags、guarded unwrap、runtime harness、真实 LLVM/LLD/ELF 和 Node differential，并有 source/HIR/MIR/case/ABI negative tests。下一条纵切是 optional chain、logical assignment 与单次求值 lowering；string ownership/GC 仍需独立 representation/runtime contract。当前 coalesce/loop 关闭不能被解释为完整 `IR-001..008` 或整个 Phase 2B 完成。
+`IR-001e/002e/003e + IR-004e/005e + RT-002d + REL-001c/002d + VERT-005` 的 nullable-number coalesce 纵切已完成：HIR v5/MIR v3 固定 16-byte nullable ABI、distinct null/undefined tags、guarded unwrap、runtime harness、真实 LLVM/LLD/ELF 和 Node differential，并有 source/HIR/MIR/case/ABI negative tests。随后 VERT-006 关闭 local logical assignment；依赖 property place 的 optional-chain/logical-assignment 仍由 Phase 3 关闭。string ownership/GC 也仍需独立 representation/runtime contract。
 
 `IR-006a + BE-002e + RT-002e + REL-002e + VERT-006` 的 local nullable coalesce-assignment 纵切已完成：真实 snapshot 固定 `value ??= fallback; return value`，HIR/MIR 复用 guarded nullable CFG 并记录 logical-assignment test/store 事件，LLVM/LLD/ELF 与独立 Node `??=` oracle 差分通过，rehashed return binding、malformed predicate/unwrap/phi、manifest/oracle substitution 和非法 ABI tag 均 fail closed。该子任务只证明局部变量 SSA writeback；完整 `IR-006` 的 property/computed-key/getter/call 单次求值证据依赖 Phase 3 `OBJ-000/001/003/006`，不得由本纵切提前关闭。
 
@@ -173,7 +173,7 @@ Phase 2B 继续按可执行纵切关闭，不能一次性把完整 `IR-001..008`
 
 `IR-001g/002g/003g + IR-004g/005g + BE-002g + RT-002g + REL-002g + VERT-008` 的 `stringLength(value: string): number` 纵切已完成：HIR v7/MIR v5 固定 16-byte borrowed immutable UTF-16 view、code-unit length 和 `string.length`/`utf16.length`；真实 ELF/Node differential 覆盖 ASCII、空串、孤立 surrogate、混合 surrogate 和 surrogate pair，非法 `{NULL, 1}` 在 ABI 入口 trap。该纵切不提供 owned storage、分配、拼接、索引或 GC。
 
-`APP-001 + CLI-001 + VERT-009` 为 Phase 2B 退出前的受限 build preview：冻结 application entrypoint/startup/exit contract，并让 `ts2bin build` 从真实源文件而非 checked-in case manifest 生成 deterministic Linux x86-64 ELF。只接受已验证 static-core 子集，unsupported 程序必须稳定拒绝；这不是 Phase 6 的通用产品 backend。
+`APP-001 + CLI-001 + VERT-009` 已完成：`ts2bin build` 从真实 source project 生成 deterministic Linux x86-64 ELF 与相邻 canonical provenance report；HIR v8/MIR v6 独立验证唯一 exported parameterless `main(): number` 的 `0..255` literal exit status，LLVM 只定义 `bingo_program_main_v1`，manifest-authenticated application startup 拥有 C `main`。边界、错误入口/返回、重哈希 HIR/MIR、旧 major、manifest/startup 替换、CLI 输出事务、两次 ELF/report identity、ABI generator/runtime rebuild/doctor 前置检查均有本地证据。D3 的外部 A3 review 仍是 release-profile 消费前置；该 preview 不是 Phase 6 通用产品 backend。至此 scoped Phase 2B static-core milestone 退出，完整 property place `IR-006` 明确保留在 Phase 3。
 
 阶段退出命令目标：
 

@@ -48,6 +48,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--startup", type=Path, required=True)
+    parser.add_argument("--application-startup", type=Path, required=True)
     parser.add_argument("--harness", type=Path, required=True)
     parser.add_argument("--compute-harness", type=Path, required=True)
     parser.add_argument("--choose-harness", type=Path, required=True)
@@ -63,6 +64,7 @@ def main():
         manifest = json.load(stream)
     expected_archive = manifest.pop("umbrellaArchive")
     expected_startup = manifest.pop("startupObject")
+    expected_application_startup = manifest.pop("applicationStartupObject")
     expected_harness = manifest.pop("harnessObject")
     expected_compute_harness = manifest.pop("computeHarnessObject")
     expected_choose_harness = manifest.pop("chooseHarnessObject")
@@ -73,6 +75,7 @@ def main():
     if (
         arguments.archive.name != expected_archive
         or arguments.startup.name != expected_startup
+        or arguments.application_startup.name != expected_application_startup
         or arguments.harness.name != expected_harness
         or arguments.compute_harness.name != expected_compute_harness
         or arguments.choose_harness.name != expected_choose_harness
@@ -83,11 +86,12 @@ def main():
     ):
         raise SystemExit(
             "artifact names do not match target manifest: "
-            f"archive={arguments.archive.name}, startup={arguments.startup.name}, "
+            f"archive={arguments.archive.name}, startup={arguments.startup.name}, applicationStartup={arguments.application_startup.name}, "
             f"harness={arguments.harness.name}, computeHarness={arguments.compute_harness.name}, chooseHarness={arguments.choose_harness.name}, classifyHarness={arguments.classify_harness.name}, coalesceHarness={arguments.coalesce_harness.name}, coalesceAssignHarness={arguments.coalesce_assign_harness.name}, stringLengthHarness={arguments.string_length_harness.name}"
         )
     archive_hash = sha256_file(arguments.archive)
     startup_hash = sha256_file(arguments.startup)
+    application_startup_hash = sha256_file(arguments.application_startup)
     harness_hash = sha256_file(arguments.harness)
     compute_harness_hash = sha256_file(arguments.compute_harness)
     choose_harness_hash = sha256_file(arguments.choose_harness)
@@ -101,6 +105,7 @@ def main():
     manifest["artifacts"] = {
         "umbrellaArchive": {"file": arguments.archive.name, "sha256": archive_hash, "bytes": arguments.archive.stat().st_size},
         "startupObject": {"file": arguments.startup.name, "sha256": startup_hash, "bytes": arguments.startup.stat().st_size},
+        "applicationStartupObject": {"file": arguments.application_startup.name, "sha256": application_startup_hash, "bytes": arguments.application_startup.stat().st_size},
         "harnessObject": {"file": arguments.harness.name, "sha256": harness_hash, "bytes": arguments.harness.stat().st_size},
         "computeHarnessObject": {"file": arguments.compute_harness.name, "sha256": compute_harness_hash, "bytes": arguments.compute_harness.stat().st_size},
         "chooseHarnessObject": {"file": arguments.choose_harness.name, "sha256": choose_harness_hash, "bytes": arguments.choose_harness.stat().st_size},

@@ -16,6 +16,18 @@
       "implementation": "startup"
     },
     {
+      "name": "bingo_application_startup_v1",
+      "returnType": "u32",
+      "parameters": [],
+      "implementation": "startup"
+    },
+    {
+      "name": "bingo_program_main_v1",
+      "returnType": "f64",
+      "parameters": [],
+      "implementation": "program"
+    },
+    {
       "name": "add",
       "returnType": "f64",
       "parameters": [

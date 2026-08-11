@@ -122,17 +122,17 @@ export function add(a: number, b: number): number { return a + b; }
 1. 实现 literal、identifier、unary/binary、call、variable、return、if/while/for/switch/conditional 的 HIR builder 与 CFG lowering。
 2. 将 flow narrowing、literal widening、`never`/unreachable 转成 HIR facts；不在 lowering 中重新猜测类型。
 3. `[primitive contract complete]` 固定 bool、null/undefined 与 UTF-16 string 的表示和 ABI，再实现对应 conversion/operator table。boolean 已冻结 canonical `i1` MIR 与严格 `uint8_t` ABI；nullable-number 已冻结 distinct null/undefined tags、16-byte ABI 和 guarded unwrap；UTF-16 已冻结 borrowed immutable `{const uint16_t *data, uint64_t length}` ABI、孤立 surrogate 保真、空/非空 canonical view 和 `.length`。owned storage、分配、索引与 GC 不属于本条纵切。
-4. 实现 `as`、`satisfies`、non-null、nullish/optional chain 和 logical assignment 的单次求值消糖。
+4. `[scoped]` Phase 2B 已关闭 nullish coalesce 与 local logical assignment 的单次求值；`as`、`satisfies`、non-null 以及依赖 property/computed-key/getter 的 optional-chain/logical-assignment place evaluation 移入 Phase 3 object/place contract，不以本阶段局部变量证据冒充完整 `IR-006`。
 5. 扩展 HIR/MIR verifier 的 dominance、phi、短路、cleanup/effect 规则；实现保序常量折叠，不做跨函数激进优化。
-6. `[pending] APP-001 + CLI-001`：冻结 static-core application entrypoint/startup 与进程退出契约，把真实 source capture、snapshot/HIR/MIR/LLVM/object/LLD 链接到明确受限的 `ts2bin build` 预览；禁止把 case harness 或函数名白名单冒充通用项目编译。
+6. `[complete] APP-001 + CLI-001 + VERT-009`：static-core application entrypoint/startup 与进程退出契约已冻结；真实 source capture 经 snapshot/HIR v8/MIR v6/LLVM/object/LLD 生成 deterministic ELF 与相邻 provenance report，入口使用 `bingo_program_main_v1` 和 manifest-authenticated application startup，未复用 case harness 或函数名到机器码映射。
 
-七条 Phase 2B 可执行纵切已关闭：`choose` 证明 boolean branch；`classify` 证明 binary64 literals、`fneg`、连续条件和多返回；`calllocal` 证明 SSA local/direct call；`loop` 证明 general CFG、edge-aware phi 与 back edge；`coalesce` 与 `coalesceAssign` 证明 nullable ABI、guarded unwrap 和局部 `??=` 写回；`stringLength` 证明 borrowed UTF-16 representation、code-unit length、孤立 surrogate、空 view 和非法 `{NULL, nonzero}` 拒绝。七者均由 deterministic ELF 独立进程执行并与锁定 Node oracle 差分，当前 HIR/MIR schema 为 v7/v5。property place、owned string/GC、模块和完整 stdlib 仍在后续阶段，通用 `build` 仍等待 APP-001/CLI-001。
+七条 fixture 纵切与 application build 纵切均已关闭：前七者由 deterministic ELF 独立进程执行并与锁定 Node oracle 差分；VERT-009 从真实项目构建唯一 exported `main(): number`，边界 `0/1/255`、source/HIR/MIR/manifest/startup 负例、versioned LLVM symbol、确定性 ELF/report 和静默精确退出码均有证据。当前 HIR/MIR schema 为 v8/v6。Phase 2B 只关闭 scoped primitive/static-core milestone，不代表完整 `IR-001..008`；property place、owned string/GC、模块和完整 stdlib 仍在后续阶段。
 
 ### 验收门槛
 
 - `classify` 等控制流样例经同一 real-LLVM runner 与 Node oracle 一致。
 - `f64` number、bool、UTF-16 string、null/undefined 的表示固定并有 ABI 测试。
-- optional chain、nullish、短路和条件表达式的副作用次数与 TypeScript/JavaScript oracle 一致。
+- 已交付的 nullish 与 local logical-assignment 纵切副作用次数与 TypeScript/JavaScript oracle 一致；property optional-chain/短路/条件 place evaluation 由 Phase 3 `OBJ-000/001/003/006` 关闭。
 - 误用 dynamic、跨域隐式转换和 disjoint assertion 在 HIR 入口被拒绝；任何 malformed golden 都不能到达 LLVM backend。
 
 ## 阶段 3：表示布局、函数、对象、类、闭包与 variance
