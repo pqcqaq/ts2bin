@@ -55,12 +55,12 @@ TypeScript source
 - checker 只能在独占借用期间访问，并且每次借用都必须调用 release；snapshot 不得持有 checker、Type 或 Signature 指针。
 - `.d.ts` 只提供编译期声明，不等于目标产物存在实现；所有运行时调用必须通过版本化 capability manifest 和 ABI 闭包检查。
 - 目标 runtime 使用 Rust 编写并按 target/profile 预编译为一个 umbrella `staticlib`，内部 crates 使用 `rlib`；LLVM 生成代码只调用版本化 `extern "C"` ABI，最终由 LLD 链接，不依赖 Rust ABI 或跨版本 bitcode。
-- 标准库采用“Rust 原语 + 受限 TypeScript 自举算法 + 可选重型引擎适配”三层结构；泛型自举代码以已验证 Bingo HIR/package 分发并按需实例化。
-- 文档中的 `self-hosted`/“自举”仅指受限 TypeScript 标准库算法。编译器 driver、frontend integration 与 lowering 当前由 Go 实现，因此“编译器编译自身”不属于现有 Phase 2/RT-007 里程碑；若要实现，必须单独立项迁移编译器实现语言和 bootstrap seed。
+- 标准库采用“Rust 原语 + 受限 TypeScript 自举算法 + 可选重型引擎适配”三层结构；Phase 4 只启动无分配、无抛出、无挂起的 self-hosted HIR/package 种子，依赖 owned storage、GC 或异常的完整核心包到 Phase 5 契约闭合后才可发布。
+- 文档中的 `self-hosted`/“自举”仅指受限 TypeScript 标准库算法。编译器 driver、frontend integration 与 lowering 当前由 Go 实现，因此“编译器编译自身”不属于现有 Phase 2/RT-007a/RT-007b 里程碑；若要实现，必须单独立项迁移编译器实现语言和 bootstrap seed。
 - 普通 TypeScript 对象允许循环引用，general static profile 默认使用非移动 tracing GC；ARC/arena 只能作为有额外可证明约束的受限 profile。
 - `Array<T>` 的可变元素默认不变，`ReadonlyArray<T>` 和只读字段才允许协变；tsgo 的历史兼容性结果不能直接当作 Bingo 布局安全证明。
 - `typescript-go` 的现行交付来自 `pqcqaq/typescript-go` 的固定 fork commit；lock 同时记录 reviewed Microsoft upstream ancestor，更新通过显式 upstream merge 与完整 compatibility gate。旧 patch/materialize/apply 机制已经退役，仅可作为标明已废弃的历史证据出现。
-- Phase 1.5 与 Phase 2A 已关闭；Phase 2B 已完成 `choose`、`classify`、`calllocal`、`loop`、`coalesce` 和 local `coalesceAssign` 六条真实 LLVM/object/LLD/进程/Node 纵切，覆盖 boolean branch、binary64 literal/`fneg`、连续 if/多返回、SSA local/direct call、general CFG、edge-aware phi、nullable-number ABI/guarded unwrap 与局部 `??=` 短路写回。完整 property/computed-key/getter/optional-chain 单次求值仍依赖 Phase 3 object/place contract；Phase 2B 尚未整体关闭，string ownership/GC、对象、EH、async、模块、self-hosted stdlib 和第二目标仍按后续阶段边界 blocked。
+- Phase 1.5 与 Phase 2A 已关闭；Phase 2B 已完成 `choose`、`classify`、`calllocal`、`loop`、`coalesce`、local `coalesceAssign` 和 borrowed UTF-16 `stringLength` 七条真实 LLVM/object/LLD/进程/Node 纵切，当前 HIR/MIR schema 为 v7/v5。完整 property/computed-key/getter/optional-chain 单次求值仍依赖 Phase 3 object/place contract；通用 `ts2bin build` 仍未实现，Phase 2B 退出前先交付明确受限的 application entrypoint/build preview。owned string、GC、对象、EH、async、模块、完整 self-hosted stdlib 和第二目标仍按后续阶段边界 blocked。
 
 ## 交付物与唯一事实来源
 

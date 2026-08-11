@@ -169,7 +169,11 @@ Phase 2B 继续按可执行纵切关闭，不能一次性把完整 `IR-001..008`
 
 `IR-006a + BE-002e + RT-002e + REL-002e + VERT-006` 的 local nullable coalesce-assignment 纵切已完成：真实 snapshot 固定 `value ??= fallback; return value`，HIR/MIR 复用 guarded nullable CFG 并记录 logical-assignment test/store 事件，LLVM/LLD/ELF 与独立 Node `??=` oracle 差分通过，rehashed return binding、malformed predicate/unwrap/phi、manifest/oracle substitution 和非法 ABI tag 均 fail closed。该子任务只证明局部变量 SSA writeback；完整 `IR-006` 的 property/computed-key/getter/call 单次求值证据依赖 Phase 3 `OBJ-000/001/003/006`，不得由本纵切提前关闭。
 
-`IR-001f/002f/003f + IR-004f/005f + BE-002f + RT-002f + REL-002f + VERT-007` 的 `classify(value: number): number` 纵切已完成：HIR v6/MIR v4 冻结 lowercase binary64 literal bits、prefix unary `-` 和五块连续 if/多返回 CFG；MIR verifier 拒绝常量、`fneg`、比较或返回路径篡改；LLVM 20 使用 ordered `<`，保留 NaN 条件为 false 与 `-0` 分类为 `+0`；一参数 C ABI harness、real LLVM/LLD/ELF 和 Node differential 覆盖负数、`-0`、小数、`1` 与 qNaN。下一条语义工作继续是 UTF-16 string representation/runtime；完整 property optional chain 仍属于 Phase 3 object/place contract。
+`IR-001f/002f/003f + IR-004f/005f + BE-002f + RT-002f + REL-002f + VERT-007` 的 `classify(value: number): number` 纵切已完成：HIR v6/MIR v4 冻结 lowercase binary64 literal bits、prefix unary `-` 和五块连续 if/多返回 CFG；MIR verifier 拒绝常量、`fneg`、比较或返回路径篡改；LLVM 20 使用 ordered `<`，保留 NaN 条件为 false 与 `-0` 分类为 `+0`；一参数 C ABI harness、real LLVM/LLD/ELF 和 Node differential 覆盖负数、`-0`、小数、`1` 与 qNaN。后续 UTF-16 工作已由 VERT-008 关闭；完整 property optional chain 仍属于 Phase 3 object/place contract。
+
+`IR-001g/002g/003g + IR-004g/005g + BE-002g + RT-002g + REL-002g + VERT-008` 的 `stringLength(value: string): number` 纵切已完成：HIR v7/MIR v5 固定 16-byte borrowed immutable UTF-16 view、code-unit length 和 `string.length`/`utf16.length`；真实 ELF/Node differential 覆盖 ASCII、空串、孤立 surrogate、混合 surrogate 和 surrogate pair，非法 `{NULL, 1}` 在 ABI 入口 trap。该纵切不提供 owned storage、分配、拼接、索引或 GC。
+
+`APP-001 + CLI-001 + VERT-009` 为 Phase 2B 退出前的受限 build preview：冻结 application entrypoint/startup/exit contract，并让 `ts2bin build` 从真实源文件而非 checked-in case manifest 生成 deterministic Linux x86-64 ELF。只接受已验证 static-core 子集，unsupported 程序必须稳定拒绝；这不是 Phase 6 的通用产品 backend。
 
 阶段退出命令目标：
 
@@ -206,7 +210,8 @@ ts2bin test --stage static-core               # REL-001a
 | `RT-005` | cleanup stack、Disposable/AsyncDisposable ABI | RT-002, IR-005 | using 的全部退出边恰好清理一次 |
 | `GC-001` | single-mutator shadow-stack root liveness、dead-slot clearing 和 LLVM optimizer barrier contract | IR-005, OBJ-000, RT-002 | 每个 safepoint 的 active root map、死亡 slot 清理、root store/reload 保留的 IR litmus/O2 检查和压力测试 |
 | `RT-006` | Rust 非移动 tracing GC v1 与 `Gc/Root`/write barrier ABI | OBJ-001, GC-001, RT-002 | 环、闭包、异步 frame、unsafe/Miri/sanitizer、弱引用前置测试；ARC 受限拒绝 |
-| `RT-007` | self-hosted TypeScript stdlib HIR/package 与按需实例化 | MOD-002, RT-003, IR-005 | 不绕过 verifier；Array/String/Set 方法 specialization 稳定并可 dead-strip |
+| `RT-007a` | 无分配/无抛出/无挂起的 self-hosted TypeScript stdlib seed HIR/package | MOD-002, RT-003, IR-005 | 不绕过 verifier；受限 Array/String/Set 方法 specialization 稳定并可 dead-strip |
+| `RT-007b` | 可发布 self-hosted core stdlib package | RT-007a, RT-006, ADV-001 | owned storage、分配、异常与 cleanup effect 全部进入 verifier/capability 闭包；Node/Test262 differential 通过 |
 
 ## 7. 高级 Runtime 与动态边界
 
@@ -214,7 +219,7 @@ ts2bin test --stage static-core               # REL-001a
 | --- | --- | --- | --- |
 | `EH-001` | Rust status/exception-carrier ABI 与 native unwind bridge contract | RT-002, IR-005 | status-to-throw shim、carrier ownership/rethrow、panic isolation、Itanium/Windows probe 和 link contract |
 | `ADV-001` | LLVM EH/runtime EH 契约与 try/catch/finally | EH-001, RT-005, RT-006 | invoke/unwind、finally、cleanup 的跨目标测试 |
-| `ADV-002` | Rust Promise/microtask 原语与 async/await 状态机 | ADV-001, RT-006, RT-007 | fulfillment/rejection/thenable/suspend root 测试；panic 不穿越 ABI |
+| `ADV-002` | Rust Promise/microtask 原语与 async/await 状态机 | ADV-001, RT-006, RT-007b | fulfillment/rejection/thenable/suspend root 测试；panic 不穿越 ABI |
 | `ADV-003` | generator/async iterator/for-await 状态机 | ADV-002, RT-004 | next/return/throw、yield*、close 协议测试 |
 | `ADV-004` | BigInt/RegExp/Symbol/TypedArray Rust runtime 模块 | RT-002, RT-006 | 独立 crate/archive/capability 逐项开启，engine/version/license 和 ES fixture 通过 |
 | `ADV-005` | 标准/legacy decorator 两条独立 lowering | OBJ-003, ADV-001 | 执行顺序、initializer、metadata profile 测试 |

@@ -383,3 +383,10 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - `classify(value: number): number` 从真实 validated snapshot 生成两个有序 `<`、五块 CFG 和三条 return；source/HIR/MIR 复核覆盖 literal constant/type、负号 operator、condition binding、successor 和 return value tamper。
 - runtime ABI 增加 `double classify(double)` 与一参数 bit harness，所有 runtime manifests 认证新对象；WSL LLVM 20/LLD 真实 ELF 对负数、`-0`、小数、`1` 与 canonical qNaN 均和 Node 22.22.0 一致。
 - Windows 定向 replay/HIR/MIR/link/runner/target tests 与 WSL LLVM 20 backend/MIR/link/runner tests 通过。Phase 2B 仍为 in progress；下一纵切为 UTF-16 string representation/runtime，完整 property optional chain 继续依赖 Phase 3 object/place contract。
+
+## 2026-08-11 Phase 2B UTF-16 string length VERT-008 完成
+
+- fork commits `bd755bedf56622708ac61f9d1b082dc77c955009` 与 `2468bb1dcc771d05307738d3f144c2c833c862f4` 新增 borrowed immutable UTF-16 `{const uint16_t *data, uint64_t length}` ABI、`string.length`/`utf16.length` lowering、独立 harness、Node code-unit oracle 与 `stringlength` case；ASCII、空串、孤立 surrogate、混合 surrogate 和 surrogate pair 全部经过真实 ELF 验证，非法 `{NULL, 1}` trap。
+- 审计发现通用 HIR preserving pass 与 LLVM admission 白名单未覆盖新纵切，已修正并把 `stringlength` 纳入 WSL LLVM runner 表。另按 reader-major 规则将 HIR/MIR 升为 v7/v5，更新 lowering identity、pass envelope/golden、lock 和旧 v6/v4 rejection；旧 Phase 2A add verifier 未放宽。
+- Windows 定向 Go tests、WSL LLVM 20 backend/link/runner tests、ABI generator check 和 `git diff --check` 通过。WSL 基础环境仍会对不存在的 `/lib/libhook.so` 输出动态加载器警告；测试通过前显式清除 `LD_PRELOAD`，该噪声不属于编译器产物。
+- 路线图新增 APP-001/CLI-001：Phase 2B 退出前实现明确受限的 application entrypoint/build preview。self-hosted stdlib 拆为 Phase 4 的无分配 seed `RT-007a` 与 Phase 5 依赖 GC/EH 的可发布闭包 `RT-007b`；Go 编译器本体仍不在 compiler self-bootstrap 范围。

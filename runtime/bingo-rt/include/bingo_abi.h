@@ -10,6 +10,11 @@ typedef struct BingoNullableNumber {
     double payload;
 } BingoNullableNumber;
 
+typedef struct BingoUtf16String {
+    const uint16_t *data;
+    uint64_t length;
+} BingoUtf16String;
+
 #define BINGO_ABI_SCHEMA_VERSION 1u
 #define BINGO_RUNTIME_ABI_VERSION 1u
 
@@ -24,6 +29,7 @@ double choose(uint8_t flag, double left, double right);
 double classify(double value);
 double coalesce(BingoNullableNumber value, double fallback);
 double coalesceAssign(BingoNullableNumber value, double fallback);
+double stringLength(BingoUtf16String value);
 
 #ifdef __cplusplus
 }

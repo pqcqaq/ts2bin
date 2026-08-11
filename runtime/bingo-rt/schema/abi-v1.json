@@ -59,6 +59,14 @@
         {"name": "fallback", "type": "f64"}
       ],
       "implementation": "program"
+    },
+    {
+      "name": "stringLength",
+      "returnType": "f64",
+      "parameters": [
+        {"name": "value", "type": "utf16_string"}
+      ],
+      "implementation": "program"
     }
   ]
 }

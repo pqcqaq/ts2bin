@@ -121,11 +121,12 @@ export function add(a: number, b: number): number { return a + b; }
 
 1. 实现 literal、identifier、unary/binary、call、variable、return、if/while/for/switch/conditional 的 HIR builder 与 CFG lowering。
 2. 将 flow narrowing、literal widening、`never`/unreachable 转成 HIR facts；不在 lowering 中重新猜测类型。
-3. `[in progress]` 固定 bool、null/undefined 与 UTF-16 string 的表示和 ABI，再实现对应 conversion/operator table。`IR-007b` 已冻结 boolean 的 canonical `i1` MIR 表示、C ABI `uint8_t` 0/1 边界、直接 condition branch 和禁止 number 隐式互转；nullable-number coalesce 已冻结 distinct null/undefined tags、16-byte ABI 和 guarded unwrap，UTF-16 string 仍待后续 representation/runtime 纵切。
+3. `[primitive contract complete]` 固定 bool、null/undefined 与 UTF-16 string 的表示和 ABI，再实现对应 conversion/operator table。boolean 已冻结 canonical `i1` MIR 与严格 `uint8_t` ABI；nullable-number 已冻结 distinct null/undefined tags、16-byte ABI 和 guarded unwrap；UTF-16 已冻结 borrowed immutable `{const uint16_t *data, uint64_t length}` ABI、孤立 surrogate 保真、空/非空 canonical view 和 `.length`。owned storage、分配、索引与 GC 不属于本条纵切。
 4. 实现 `as`、`satisfies`、non-null、nullish/optional chain 和 logical assignment 的单次求值消糖。
 5. 扩展 HIR/MIR verifier 的 dominance、phi、短路、cleanup/effect 规则；实现保序常量折叠，不做跨函数激进优化。
+6. `[pending] APP-001 + CLI-001`：冻结 static-core application entrypoint/startup 与进程退出契约，把真实 source capture、snapshot/HIR/MIR/LLVM/object/LLD 链接到明确受限的 `ts2bin build` 预览；禁止把 case harness 或函数名白名单冒充通用项目编译。
 
-六条 Phase 2B 可执行纵切已关闭：`choose(flag, left, right)` 证明 boolean/number HIR、三块 CFG、i1/f64 MIR、严格 i8 ABI 与真实 LLVM conditional branch；`classify(value)` 证明 binary64 literal bits、prefix `-`、连续 `<` 条件、五块 CFG、多返回、一参数 C ABI 与 NaN/-0 observable behavior；`calllocal` 证明 SSA local bind/assign、签名绑定 direct call、多函数 HIR/MIR 与 internal-linkage LLVM helper；`loop` 证明 `while` source proof、`<` lowering、general CFG、显式 incoming edge、loop-carried phi 与 back edge；`coalesce(value: number | null | undefined, fallback: number)` 证明 nullable-number 16-byte ABI、`null`/`undefined` distinct tags、nullish payload canonicalization、guarded unwrap 与 phi；`coalesceAssign` 在同一 nullable contract 上证明局部变量 `??=` 的短路、SSA writeback 和返回绑定。六者均由 deterministic ELF 独立进程执行并与锁定 Node oracle 差分，malformed source/HIR/MIR/CFG/phi/tag 在 LLVM 前或 ABI 入口 fail closed。`coalesceAssign` 只关闭 local place，不关闭完整 `IR-006`：属性、computed key、getter 和 optional-chain 的单次求值仍依赖 Phase 3 的 `OBJ-000/001/003/006` object/place contract。string ownership/GC、模块和完整 stdlib 也仍在后续阶段，这不表示整个 Phase 2B 已完成。
+七条 Phase 2B 可执行纵切已关闭：`choose` 证明 boolean branch；`classify` 证明 binary64 literals、`fneg`、连续条件和多返回；`calllocal` 证明 SSA local/direct call；`loop` 证明 general CFG、edge-aware phi 与 back edge；`coalesce` 与 `coalesceAssign` 证明 nullable ABI、guarded unwrap 和局部 `??=` 写回；`stringLength` 证明 borrowed UTF-16 representation、code-unit length、孤立 surrogate、空 view 和非法 `{NULL, nonzero}` 拒绝。七者均由 deterministic ELF 独立进程执行并与锁定 Node oracle 差分，当前 HIR/MIR schema 为 v7/v5。property place、owned string/GC、模块和完整 stdlib 仍在后续阶段，通用 `build` 仍等待 APP-001/CLI-001。
 
 ### 验收门槛
 
@@ -173,7 +174,7 @@ export function add(a: number, b: number): number { return a + b; }
 6. 将 `for...of`、迭代器、array fast path、object/array spread 和解构连入 runtime。
 7. 实现 `using`/`await using` 的 cleanup stack、`Disposable`/`AsyncDisposable` ABI。
 8. 为每个标准库调用查询 [stdlib-runtime-plan.md](stdlib-runtime-plan.md) 的 capability manifest；声明存在但 runtime 未实现时在编译期报错。
-9. 建立 self-hosted stdlib HIR/package，先把 Array/String/Set/Iterator 中不依赖原始内存的泛型算法接入普通 specialization 和 verifier。
+9. 建立 `RT-007a` self-hosted stdlib HIR/package 种子，只接入不分配、不抛出、不挂起且不依赖 owned storage 的 Array/String/Set/Iterator 算法；普通 specialization、verifier、deterministic package hash 和 dead-strip 全部适用。
 
 ### 验收门槛
 
@@ -182,6 +183,7 @@ export function add(a: number, b: number): number { return a + b; }
 - `for...of`、spread、using 在正常返回、break/continue、throw、finally 路径都正确清理。
 - `const enum` 只在可证明常量和边界安全时内联。
 - `core-es2020` 等 manifest 的 capability 闭包、ABI hash 和缺失项报告可在 `ts2bin doctor` 中复现。
+- Phase 4 的 self-hosted 退出只证明 seed package；依赖分配、GC、异常或 async 的算法不得据此标记为 complete。
 
 ## 阶段 5：runtime-heavy 语义与兼容层
 
@@ -199,6 +201,7 @@ export function add(a: number, b: number): number { return a + b; }
 6. JSX 先按 checker 解析 factory/fragment，再走普通调用；建立最小 JSX runtime。
 7. dynamic profile：`DynamicValue`、属性字典、外部 JS/Node/FFI boundary、显式 checked cast 和诊断统计。
 8. 先完成 `GC-001` 的 single-mutator、safepoint active-root/dead-slot 和 optimizer barrier 契约，再接入 Rust 非移动 tracing GC；`Gc<T>` 不等于 root，unsafe、root、barrier 和 FFI 边界按 [rust-runtime-and-linking.md](rust-runtime-and-linking.md) 审计。ARC/arena 只实现为带无环证明和 capability 限制的受限 profile。
+9. 在 RT-006 与 ADV-001 闭合后完成 `RT-007b`：把需要 owned storage、分配、异常或清理的核心 self-hosted stdlib 算法接入同一 package/verifier，形成可发布闭包。
 
 ### 验收门槛
 

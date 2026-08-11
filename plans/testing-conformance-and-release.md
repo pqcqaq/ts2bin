@@ -257,7 +257,7 @@ ts2bin snapshot    # typed snapshot
 ts2bin emit-hir    # HIR text/binary
 ts2bin emit-mir    # MIR + verifier
 ts2bin emit-llvm   # LLVM textual/bitcode
-ts2bin build       # object/executable
+ts2bin build       # planned APP-001/CLI-001 preview; not implemented yet
 ts2bin test        # case manifest runner
 ts2bin doctor      # tsgo/LLVM/runtime capability audit
 ```

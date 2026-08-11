@@ -20,6 +20,7 @@
   "classifyHarnessObject": "bingo_classify_harness.o",
   "coalesceHarnessObject": "bingo_coalesce_harness.o",
   "coalesceAssignHarnessObject": "bingo_coalesce_assign_harness.o",
+  "stringLengthHarnessObject": "bingo_string_length_harness.o",
   "capabilities": [
     {
       "logicalName": "rt.abi.version",
