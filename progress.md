@@ -620,3 +620,9 @@ go run ./cmd/ts2bin compatibility --update-baseline
 - `OBJ-005` layout copy native boundary 已补齐：新增 C11 harness 通过 `bingo_gc_alloc_v1` 分配 source，调用 `bingo_object_layout_copy_v1` 后修改 source 并验证 target identity 与 payload bits；Node oracle 新增同语义 `copy !== source` 脚本及输入校验/脚本 hash。Linux-tagged LLVM test 会把 emitted ELF object、harness 与现有 runtime archive 链接，覆盖 zero、negative-zero、normal、infinity 和 NaN bits 的 native/Node differential；本机 Windows 仅完成 C syntax、Go test/vet，未执行 Linux tagged native 证据，CI 与 locked manifest/hash 不变。
 - `OBJ-005` layout copy artifact/pipeline quality gate 收紧：strict replay reader 现重新执行完整 frontend snapshot validator 与 compiler provenance join，evidence 字段使用显式稳定 JSON 名称，并拒绝 unknown、oversize、frontend-hash 与深层 snapshot/artifact substitution；3 秒 16-worker decoder fuzz 完成 33 次完整 replay 执行无失败。production consumer 将 current compiler identity、BuildPlan frontend hash、static profile 与 nil TargetMachine 拆为独立 fail-closed gate，负例矩阵全部通过；状态、CI、runtime manifest/hash 均不变。
 - `OBJ-005` layout copy O2 preservation gate 已补到真实 emitter 模块：Linux-tagged test 在原始 IR 与 `default<O2>` 后分别 verify，要求六个 bound GC call 按 `frame.link→root.store→root.publish→alloc→root.reload→frame.unlink` 执行顺序保留，且 f64 load/store 数据路径仍存在；bitcast 与冗余显式 safepoint 继续禁止。该测试不是通用 GC litmus 的替代证明，但当前 Windows host 仍无法执行 Linux+cgo+LLVM tagged suite，故只记录测试接线，不记录 O2/native 实测通过。
+
+## 2026-08-12 Phase 3 Linux migration handoff
+
+- Windows 阶段已按三批提交：`typescript-go` `2ef21cd2f`、runtime `c0364eb`、父仓库文档/lock/gitlink `d7229db`；父仓库与子模块 clean，gitlink、submodule HEAD 与 lockfile 一致。
+- 新增 [Phase 3 Linux development handoff](plans/phase3-linux-handoff-2026-08-12.md)，冻结工具链、bootstrap、baseline gates、producer-driven authoritative rebuild、`OBJ-003b -> OBJ-005 -> OBJ-006` 关闭顺序、RT-003a/MOD/EH 后续路线和分批提交纪律。
+- 不再在 Windows 启动新的 RT-003a 代码纵切。Linux 首项必须运行真实 runtime producer，禁止手工更新 manifest/hash；CI 仍关闭，迁移与本地 Linux 证据不构成 `Integrated`。

@@ -221,6 +221,11 @@ ts2bin test --stage static-core               # REL-001a
 
 ## 6. 模块、泛型和核心 Runtime
 
+Linux 后续开发以 [Phase 3 Linux development handoff](phase3-linux-handoff-2026-08-12.md)
+为当前迁移基线：先执行 producer-driven authoritative runtime rebuild，按
+`OBJ-003b -> OBJ-005 -> OBJ-006` 关闭实际 Linux 证据，再进入 RT/MOD/EH
+主线。CI 仍为 owner-deferred，本地证据不得越级解释为 `Integrated`。
+
 | ID | 结果 | 依赖 | 主要验收 |
 | --- | --- | --- | --- |
 | `MOD-001` | 模块导出槽、两阶段初始化和循环依赖 | FE-006, OBJ-001a | 重复导入一次执行；循环读取行为固定 |

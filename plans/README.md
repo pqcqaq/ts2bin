@@ -83,6 +83,7 @@ TypeScript source
 | ES 标准库和宿主 API 是否可链接 | `stdlib-runtime-plan.md` | capability manifest、ABI hash、runtime tests |
 | 何时算完成、如何回归和发布 | `testing-conformance-and-release.md` | case manifest、差分报告、CI/reproducibility 报告 |
 | 如何拆 issue 并安排第一条纵切 | `implementation-backlog.md` | 稳定 issue ID、依赖 DAG、阶段退出命令 |
+| 如何在 Linux 继续 Phase 3 | `phase3-linux-handoff-2026-08-12.md` | 固定提交基线、authoritative rebuild、剩余顺序和证据规则 |
 | 如何执行开发、审计和发布 | `compiler-development-process.md` | 状态机、变更/审计等级、审计记录和回滚规则 |
 | 如何保证代码可读和可维护 | `coding-and-maintainability-standards.md` | 抽象准入、注释/API 文档、依赖方向、可读性审计 |
 | 如何编写完全独立的测试 | `test-authoring-standards.md` | case manifest、隔离 workspace、golden、乱序/race/重复门禁 |
