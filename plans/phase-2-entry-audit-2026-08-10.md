@@ -1,5 +1,7 @@
 # Phase 2 准入复审（2026-08-10）
 
+> Historical entry audit. All P2A entry items described here were subsequently closed. Current status and Phase 3 sequencing live in [implementation-backlog.md](implementation-backlog.md) and [phase3-entry-and-hardening.md](phase3-entry-and-hardening.md).
+
 ## 结论
 
 现有编译器方向保持合理，P2A 应继续按 number-only Linux x86-64 真实 LLVM 纵切推进，不需要重写总体架构。复审发现的四项准入缺口必须在进入 P2A 实现前关闭：frontend 阶段门禁可绕过、Linux/WSL 无原生 doctor、P2A 验收命令无任务归属、父仓库无自身 CI。它们属于交付与计划闭环问题，不是 HIR/TargetContext/MIR 分层错误。

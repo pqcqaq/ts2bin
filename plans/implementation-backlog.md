@@ -23,6 +23,8 @@ issue 从提出到发布的状态、变更分级、审计入口和记录模板�
 | `implemented` | 主要生产代码已经存在，至少有定向正例；不代表阶段门禁已通过 |
 | `prototype` | 只证明受限 happy path，schema、依赖边界或负例仍不完整 |
 | `acceptance-blocked` | 实现已存在，但指定 regression、独立进程/clean clone、生产集成或负例证据仍失败/未运行 |
+| `review-blocked` | 本地实现与证据已闭合，但流程要求的独立 A3/A4 审计尚未完成 |
+| `owner-deferred` | 项目负责人明确延期的工程门禁；不得被解释为已通过，也不得用于 Integrated/Release 状态 |
 | `ready` | 所有前置门禁已关闭，可以开始实现，但本 issue/阶段尚未达到退出条件 |
 | `complete` | issue 的正例、拒绝例、独立边界、全套验收命令和交付 provenance 全部通过 |
 
@@ -33,9 +35,14 @@ flowchart LR
   FND["FND: fork/lock/profile"] --> FE["FE: tsgo facade/snapshot"]
   FE --> CONTRACT["Phase 1.5: lowering contract"]
   CONTRACT --> IR["IR: HIR/MIR/verifier"]
-  IR --> OBJ["OBJ: layout/closure/variance"]
+  IR --> OBJSEM["OBJ-000a: identity/alias semantics"]
+  IR --> GC["GC-001a: root/O2 contract"]
+  OBJSEM --> LAYOUT["OBJ-000b: two-DataLayout ABI"]
+  GC --> HEAP["RT-006a: minimal tracing heap"]
+  LAYOUT --> HEAP
+  HEAP --> OBJ["OBJ/closure executable slices"]
   OBJ --> MOD["MOD: modules/generics"]
-  OBJ --> RT["RT: runtime/capabilities/GC"]
+  HEAP --> RT["RT: owned strings/collections"]
   MOD --> ADV["ADV: EH/async/generator/dynamic"]
   RT --> ADV
   IR --> BE["BE: LLVM backend"]
@@ -173,7 +180,7 @@ Phase 2B 继续按可执行纵切关闭，不能一次性把完整 `IR-001..008`
 
 `IR-001g/002g/003g + IR-004g/005g + BE-002g + RT-002g + REL-002g + VERT-008` 的 `stringLength(value: string): number` 纵切已完成：HIR v7/MIR v5 固定 16-byte borrowed immutable UTF-16 view、code-unit length 和 `string.length`/`utf16.length`；真实 ELF/Node differential 覆盖 ASCII、空串、孤立 surrogate、混合 surrogate 和 surrogate pair，非法 `{NULL, 1}` 在 ABI 入口 trap。该纵切不提供 owned storage、分配、拼接、索引或 GC。
 
-`APP-001 + CLI-001 + VERT-009` 已完成：`ts2bin build` 从真实 source project 生成 deterministic Linux x86-64 ELF 与相邻 canonical provenance report；HIR v8/MIR v6 独立验证唯一 exported parameterless `main(): number` 的 `0..255` literal exit status，LLVM 只定义 `bingo_program_main_v1`，manifest-authenticated application startup 拥有 C `main`。边界、错误入口/返回、重哈希 HIR/MIR、旧 major、manifest/startup 替换、CLI 输出事务、两次 ELF/report identity、ABI generator/runtime rebuild/doctor 前置检查均有本地证据。D3 的外部 A3 review 仍是 release-profile 消费前置；该 preview 不是 Phase 6 通用产品 backend。至此 scoped Phase 2B static-core milestone 退出，完整 property place `IR-006` 明确保留在 Phase 3。
+`APP-001 + CLI-001 + VERT-009` 已完成 Phase 3 准入所需的实现、本地正/负例和 [self-audit 证据](phase2b-a3-self-audit-2026-08-11.md)：`ts2bin build` 可从真实 source project 生成 deterministic Linux x86-64 ELF 与相邻 canonical provenance report；HIR v8/MIR v6 独立验证唯一 exported parameterless `main(): number` 的 `0..255` literal exit status。该 D3 application preview 对 Integrated/release-profile consumption 仍为 `review-blocked`，因为独立 A3 review 未完成。自动 CI 为 `owner-deferred`，不改变 Phase 3 implementation-ready 结论，也不提供发布证据。
 
 阶段退出命令目标：
 
@@ -184,33 +191,52 @@ ts2bin emit-mir --verify testdata/ts2bin/lowering # IR-008a
 ts2bin test --stage static-core               # REL-001a
 ```
 
+### 4.3 Phase 2.5 engineering hardening
+
+| ID | 状态 | 依赖 | 关闭证据 |
+| --- | --- | --- | --- |
+| `ENG-001` | `complete` | APP-001 | ELF/report 共用 staged atomic no-clobber publisher；并发 owner 不被覆盖；编码/发布失败回滚已生成 ELF，两个最终路径均不存在。 |
+| `ENG-002` | `complete` | Phase 2B | primitive lowerer、MIR function-set verifier 与 LLVM emitter 使用显式 registry；ambiguous lowerer 被拒绝，重复 backend whitelist 已移除，lowerer registry source 纳入 compiler identity hash。 |
+| `REL-003a` | `complete` | FE-008, IR-003/005 | `FrontendSnapshot`、`ProgramSnapshot`、Phase 2 HIR 和 structural MIR strict decoder 具有 256 KiB/1 MiB size-bound seed fuzz、canonical round-trip invariant，以及 HIR unknown/schema/hash 固定负例。 |
+| `GOV-001` | `review-blocked` | APP-001 | 独立审计者完成 D3/A3 design + implementation review 后，application preview 才可进入 Integrated/release-profile consumption。 |
+| Automatic CI | `owner-deferred` | project direction | 保持手动 workflow，不修改自动 trigger；重新启用前不允许声称 Integrated/ReleaseCandidate。 |
+
 ## 5. 布局、对象与方差
 
 | ID | 结果 | 依赖 | 主要验收 |
 | --- | --- | --- | --- |
-| `OBJ-000` | Structural object view、aliasing、identity/equality、GC trace 和 C ABI layout contract | IR-001, IR-000 | `RepType`/header/layout/trace/identity 规范化；alias/read-write/GC/ABI negative golden；未闭合契约不得进入布局实现 |
-| `OBJ-001` | object/class/tuple/array layout descriptor | OBJ-000, IR-007 | 字段 offset、alignment、nullable 和 shape hash 稳定 |
-| `OBJ-002` | FuncRef、闭包环境、lexical `this`、间接调用 | OBJ-001 | 捕获、递归、escaping closure 和签名不匹配测试 |
-| `OBJ-003` | class extends/super/private/accessor/static init | OBJ-001, OBJ-002 | 初始化顺序、private identity、getter effect fixture |
-| `OBJ-004` | Bingo variance 分析与 ABI compatibility proof | OBJ-001, FE-004 | 返回协变、参数逆变、可写字段/数组不变 |
-| `OBJ-005` | checked cast、layout adapter、variance thunk | OBJ-004, IR-005 | adapter 保留调用语义；disjoint/`as any as` 默认拒绝 |
-| `OBJ-006` | 已知 shape property/index access 与 dynamic boundary | OBJ-001, OBJ-000 | 静态 key 直达；未知 key 产生 R 或显式 DynamicBoundary |
+| `OBJ-000a` | reference identity、aliasing、equality、readonly/write、escape 与 dynamic boundary 语义契约（`SelfAudited`） | IR-001, IR-000 | [设计/自审](phase3-obj-000a-design-2026-08-11.md)；versioned canonical contract、strict decoder/fuzz、mutable alias layout-proof gate 和语义正/负例通过；无物理布局/runtime ABI |
+| `OBJ-000b + BE-004b` | versioned object header/shape/field/trace ABI，同时绑定 Linux x86-64 与 AArch64 compile-only DataLayout（`SelfAudited`） | OBJ-000a, BE-001 | [设计/自审](phase3-obj-000b-be-004b-design-2026-08-11.md)；Rust/C/LLVM size-align-offset 一致，schema/DataLayout/layout/offset/presence/trace substitution fail closed；无 allocation/GC |
+| `GC-001a + BE-003b` | root liveness、safepoint、dead-slot、write barrier 与 O2 preservation contract（`SelfAudited`） | OBJ-000a, IR-005, RT-002 | [设计/自审](phase3-gc-001a-be-003b-design-2026-08-11.md)；canonical plan、独立 CFG/phi fixed-point、malformed root negative、LLVM O0/O2 双目标 proof |
+| `RT-006a` | 支撑 owned object 的最小非移动 tracing heap（`SelfAudited`） | OBJ-000b, GC-001a, RT-002 | [设计/自审](phase3-rt-006a-design-2026-08-11.md)；cycle/root stress、malformed ABI/frame negative、release archive/manifest determinism；无 weak/finalization/async frame |
+| `OBJ-001a + OBJ-006a + BE-003a + VERT-010` | object literal、静态 property read/write、identity/alias 纵切（`SelfAudited`） | RT-006a, OBJ-000b | [设计/自审](phase3-vert-010-design-2026-08-11.md)；canonical source-to-ELF、Node differential、可重算 semantic contract、完整 source/HIR/MIR/GC/backend negatives、fuzz 与 deterministic report 均通过 |
+| `IR-006b + OBJ-003a/006b + VERT-011` | computed key、getter、optional chain、property logical assignment PlaceRef（`SelfAudited`） | VERT-010 | [设计/自审](phase3-vert-011-design-2026-08-11.md)；canonical source-to-ELF、Node side-effect differential、CLI 原子制品发布、unified runner、完整负例、fuzz 与 deterministic runtime/report 证据通过 |
+| `OBJ-002a + BE-003a + VERT-012` | 首个 escaping mutable capture、FuncRef 与 indirect call 纵切（`SelfAudited`）；lexical `this`、递归、嵌套环境和 signature adaptation 后续独立闭合 | RT-006a, VERT-010 | [设计/自审](phase3-vert-012-design-2026-08-11.md)；canonical closure contract、snapshot/HIR v11/MIR v9、by-cell GC layout/root lifetime、LLVM/ELF/Node、manifest harness、CLI、runner、fuzz 与 deterministic evidence 通过 |
+| `OBJ-003b + BE-003a + VERT-013a` | base class nominal identity、constructor receiver、instance field initialization 与 receiver-bound method（`SelfAudited`）；extends/super/private/static 后续独立纵切 | OBJ-001a, OBJ-002a, OBJ-003a | [设计/自审](phase3-vert-013a-design-2026-08-11.md)；contract/HIR/MIR/layout/GC binding、LLVM/ELF/Node、manifest harness、CLI、runner、fuzz、race 与 deterministic evidence 通过 |
+| `OBJ-003b + BE-003a + VERT-013b` | 一个 statically-dispatched derived class、direct `super()`、base-prefix/derived-suffix layout（`SelfAudited`）；private/protected/static 与 variance/adapters 后续独立纵切 | VERT-013a | [设计](phase3-vert-013b-design-2026-08-12.md)；snapshot→contract v2→HIR v13→layout→MIR v11/bound MIR→TargetContext→LLVM/ELF/Node→runtime/runner/CLI 全链本地闭合；CI owner-deferred |
+| `OBJ-003b` private/protected access | 声明类 private nominal identity 与 protected lexical/receiver access（`Implementing`）；不含 `#private`、static、variance、cast 或 adapter | VERT-013b | [设计](phase3-obj-003b-access-design-2026-08-12.md)；canonical access/execution contracts、checker-free replay v2、HIR v15、structural MIR v13、post-layout bound MIR、TargetContext/layout/backend plan、LLVM emitter、runtime harness/runner/CLI 和 decoders/fuzz 已实现；仍待 authoritative Linux runtime rebuild、locked manifest 更新、LLVM O0/O2、ELF 和 native/Node differential 实际证据 |
+| `OBJ-004` | Bingo variance 分析与 ABI compatibility proof（`SelfAudited`） | OBJ-001a, OBJ-000b, FE-004 | per-declaration contract、checker-free interface replay、真实 nested-generic/SCC、cross-module type relation、object-layout equality 与 canonical HIR direct-reuse gate 已本地闭合；CI owner-deferred，见 [设计/自审](phase3-obj-004-variance-design-2026-08-12.md) |
+| `OBJ-005` | checked cast、layout adapter、variance thunk（`Implementing`） | OBJ-004, IR-005 | readonly `ObjectViewProof`、真实 data/accessor snapshot replay、独立 HIR artifact、MIR v2 receiver/getter/ABI/effect binding、data/accessor backend plan、LLVM getter join、runtime harness 与 Node oracle 已实现；explicit layout copy adapter已闭合semantic/layout proof、真实static fixture的checker-free self-contained replay、additive HIR、allocation-root GC safety、target-dependent MIR、真实static TargetContext/catalog binding和strict backend plan；原子no-clobber `emit-object-layout-copy-replay` 与 strict production consumer 绑定current compiler identity、exact static BuildPlan frontend hash、observed TargetMachine和完整contract→HIR→MIR重推导；bound closure由GC事件重建为`alloc + frame.link/unlink + root.store/publish/reload`六项，LLVM20 emitter经TargetMachine接入并固定rooted allocation与f64 load/store，禁止identity preservation/accessor/optional/private/protected/reference-without-barrier/bitcast/redundant safepoint；`object_layout_copy_bits.c`真实GC分配/突变/identity harness、Node new-identity oracle及Linux tagged O0/ELF/native differential已加入但本机未执行，见[设计](phase3-obj-005-layout-copy-design-2026-08-12.md)；checked-cast replay v4 内嵌 canonical frontend snapshot并由 decoder checker-free 重算 evidence/boundary/semantic/layout/cast，真实 ambient `unknown` matching/missing fixture、原子 no-clobber `emit-checked-cast-replay` artifact boundary（正式用户边界，不另造 TypeScript cast syntax）、strict `Lower/ExecuteCheckedObjectCastReplay` artifact consumer（current compiler identity + BuildPlan hash join）、interop BuildPlan→TargetContext→catalog→binding→backend production pipeline 与 static/runtime-profile fail-closed gate、shape-match runtime ABI 与 strict tamper/fuzz 已实现；FunctionThunk v1 semantic/frontend replay/additive HIR/target-dependent MIR/backend plan/LLVM20 Linux emitter、no-clobber `emit-function-thunk-replay` 与 strict production consumer 已绑定 exact declarations、Dog→Animal relation、current compiler/static BuildPlan、target/DataLayout、object `gc-ref`、`{code-ptr,gc-ref-or-null}` FuncRef ABI，并实现 parameter identity→source indirect call→return identity；Linux O0/O2、ELF、C harness、environment/object identity、production target join 与 Node differential 测试已加入，但当前 Windows host 无法访问 WSL，故 native 证据仍待实际执行；权威 interop runtime manifest rebuild、positive checked-cast binding/native evidence仍待完成，见[checked-cast设计](phase3-obj-005-checked-cast-design-2026-08-12.md)与[FunctionThunk设计](phase3-obj-005-function-thunk-design-2026-08-12.md)； |
+| `OBJ-006` | 已知 shape property/index access 与 dynamic boundary 完整闭合（`Implementing`） | VERT-011, OBJ-000a | admission/真实 interop replay/additive HIR 已冻结；DynamicValue ABI v1固定16-byte `{tag:u32,reserved:u32,payload:u64}`、opaque host handle/number bits/UTF-16 key、status `0/6`与exception-result contract；authenticated host registry、Rust property-load worker、generated C/Rust ABI、canonical replay CLI和host-number record registration ABI已实现，production replay→HIR→target MIR→authoritative resolve/bind 与严格 backend plan/LLVM20 wrapper已接通；`emit-property-access-unbound` 只发布 replay/HIR/unbound MIR/strict report 的deterministic no-clobber bundle，明确不发布bound/backend/LLVM/object；runtime build chain 现支持 static 基线与独立 interop overlay，Linux build 会在 dynamic C smoke 成功后分别生成两个 profile manifest，overlay capability 按 logical name 唯一排序并进入 profile-specific target identity；Go runtime-manifest/catalog validator共用profile-specific capability closure，interop严格要求唯一dynamic capability的symbol/signature/`call,read,throw` effects和排序，结构正确候选仍在最终authoritative identity gate fail closed；Go test按Python writer算法从真实baseline+overlay重算interop target hash，锁住producer/consumer跨语言一致性；TargetContext 现显式接纳 static/interop 契约但按 profile 锁定独立 authoritative manifest identity，当前仅发布 static identity，故 interop plan 配 static manifest 在 capability binding 前 fail closed；locked catalog负例证明 capability不能偷渡，C smoke已为Linux authoritative rebuild接入，但 authoritative interop manifest identity、positive binding和Linux object/native harness仍待完成 |
 
 ## 6. 模块、泛型和核心 Runtime
 
 | ID | 结果 | 依赖 | 主要验收 |
 | --- | --- | --- | --- |
-| `MOD-001` | 模块导出槽、两阶段初始化和循环依赖 | FE-006, OBJ-001 | 重复导入一次执行；循环读取行为固定 |
+| `MOD-001` | 模块导出槽、两阶段初始化和循环依赖 | FE-006, OBJ-001a | 重复导入一次执行；循环读取行为固定 |
 | `MOD-002` | 按表示分组的泛型单态化与预算 | OBJ-004, IR-005 | MIR 无 unresolved type parameter；超限诊断可定位 |
 | `MOD-003` | import/export type 擦除与 ambient/FFI contract | MOD-001 | `.d.ts` 无函数体不生成代码；未绑定 extern 编译失败 |
 | `RT-001` | 从 `lib.es*.d.ts` 生成 stdlib/capability candidate | FE-007 | 81 分项、314 类型、2173 成员全部进入 manifest |
 | `RT-002` | Rust workspace、`bingo-abi` schema、native staticlib 与 runtime registry | RT-001, IR-005 | 空 runtime/startup 跨语言 smoke link；`repr(C)`/symbol/layout 双向 diff；缺 capability 编译失败 |
-| `RT-003` | Rust UTF-16 string、array/tuple、Map/Set 基础 runtime | RT-002, OBJ-001 | safe/unsafe 边界、UTF-16、SameValueZero、顺序和边界 conformance |
-| `RT-004` | iterator、spread、for-of 和 IteratorClose | RT-003 | 正常/throw/break/return 都执行正确 close |
-| `RT-005` | cleanup stack、Disposable/AsyncDisposable ABI | RT-002, IR-005 | using 的全部退出边恰好清理一次 |
-| `GC-001` | single-mutator shadow-stack root liveness、dead-slot clearing 和 LLVM optimizer barrier contract | IR-005, OBJ-000, RT-002 | 每个 safepoint 的 active root map、死亡 slot 清理、root store/reload 保留的 IR litmus/O2 检查和压力测试 |
-| `RT-006` | Rust 非移动 tracing GC v1 与 `Gc/Root`/write barrier ABI | OBJ-001, GC-001, RT-002 | 环、闭包、异步 frame、unsafe/Miri/sanitizer、弱引用前置测试；ARC 受限拒绝 |
-| `RT-007a` | 无分配/无抛出/无挂起的 self-hosted TypeScript stdlib seed HIR/package | MOD-002, RT-003, IR-005 | 不绕过 verifier；受限 Array/String/Set 方法 specialization 稳定并可 dead-strip |
+| `RT-003a` | owned UTF-16 string、array/tuple 与 readonly view | RT-006a, OBJ-001a | allocation/root/UTF-16/bounds conformance；不得回退为泄漏式测试 heap |
+| `RT-003b` | Map/Set 基础 runtime | RT-003a, OBJ-004 | SameValueZero、插入顺序、迭代和边界 conformance |
+| `RT-004a` | 同步 iterator、spread、for-of 与 IteratorClose | RT-003a | normal/break/continue/return 路径恰好 close 一次 |
+| `RT-004b` | throwing IteratorClose | RT-004a, ADV-001, BE-003c | throw/finally/return precedence 与跨目标运行测试 |
+| `RT-005a` | 同步 cleanup stack 与 Disposable ABI | RT-002, IR-005 | normal/break/continue/return 的 using cleanup 恰好一次 |
+| `RT-005b` | throwing cleanup | RT-005a, ADV-001, BE-003c | throw/finally/rethrow cleanup precedence |
+| `RT-005c` | AsyncDisposable / await using | RT-005b, ADV-002 | suspend/reject/cancel 路径 cleanup 恰好一次 |
+| `GC-001`, `RT-006` | 在 Phase 3 最小 heap 上扩展完整 tracing GC | RT-006a, OBJ-002a | async frame、压力预算、unsafe/Miri/sanitizer、弱引用前置测试 |
+| `RT-007a` | 无分配/无抛出/无挂起的 self-hosted TypeScript stdlib seed HIR/package | MOD-002, IR-005 | package format 不依赖 owned runtime；specialization 稳定并可 dead-strip |
 | `RT-007b` | 可发布 self-hosted core stdlib package | RT-007a, RT-006, ADV-001 | owned storage、分配、异常与 cleanup effect 全部进入 verifier/capability 闭包；Node/Test262 differential 通过 |
 
 ## 7. 高级 Runtime 与动态边界
@@ -218,12 +244,12 @@ ts2bin test --stage static-core               # REL-001a
 | ID | 结果 | 依赖 | 主要验收 |
 | --- | --- | --- | --- |
 | `EH-001` | Rust status/exception-carrier ABI 与 native unwind bridge contract | RT-002, IR-005 | status-to-throw shim、carrier ownership/rethrow、panic isolation、Itanium/Windows probe 和 link contract |
-| `ADV-001` | LLVM EH/runtime EH 契约与 try/catch/finally | EH-001, RT-005, RT-006 | invoke/unwind、finally、cleanup 的跨目标测试 |
-| `ADV-002` | Rust Promise/microtask 原语与 async/await 状态机 | ADV-001, RT-006, RT-007b | fulfillment/rejection/thenable/suspend root 测试；panic 不穿越 ABI |
-| `ADV-003` | generator/async iterator/for-await 状态机 | ADV-002, RT-004 | next/return/throw、yield*、close 协议测试 |
+| `ADV-001 + BE-003c` | LLVM EH/runtime EH 契约与 try/catch/finally | EH-001, RT-005a, RT-006a | invoke/unwind、finally、cleanup 的跨目标测试；同时解锁 RT-004b/005b |
+| `ADV-002` | Rust Promise/microtask 原语与 async/await 状态机 | ADV-001, RT-006, RT-007a | fulfillment/rejection/thenable/suspend root 测试；panic 不穿越 ABI |
+| `ADV-003` | generator/async iterator/for-await 状态机 | ADV-002, RT-004b | next/return/throw、yield*、close 协议测试 |
 | `ADV-004` | BigInt/RegExp/Symbol/TypedArray Rust runtime 模块 | RT-002, RT-006 | 独立 crate/archive/capability 逐项开启，engine/version/license 和 ES fixture 通过 |
-| `ADV-005` | 标准/legacy decorator 两条独立 lowering | OBJ-003, ADV-001 | 执行顺序、initializer、metadata profile 测试 |
-| `ADV-006` | JSX runtime contract | MOD-003, OBJ-002 | factory/fragment/import source 和 children 求值顺序 |
+| `ADV-005` | 标准/legacy decorator 两条独立 lowering | OBJ-003b, ADV-001 | 执行顺序、initializer、metadata profile 测试 |
+| `ADV-006` | JSX runtime contract | MOD-003, OBJ-002a | factory/fragment/import source 和 children 求值顺序 |
 | `ADV-007` | DynamicValue、host FFI 和 checked interop | OBJ-006, ADV-001 | 每个边界可审计；static 未触达代码不受影响 |
 | `ADV-008` | ES2025/ESNext/Temporal/Intl capability 扩展 | RT-002, ADV-002 | experimental profile、数据版本和外部 ABI 固定 |
 
@@ -234,15 +260,19 @@ ts2bin test --stage static-core               # REL-001a
 | `BE-001` | `tinygo.org/x/go-llvm`/LLVM 20 环境、TargetMachine/DataLayout 与 wrapper | FND-004 | `ts2bin doctor`、最小 module、VerifyModule 和 object smoke 通过；不依赖完整 MIR |
 | `BE-002` | primitive/CFG/call/global/source metadata lowering | BE-001, IR-007 | LLVM golden、llvm-as/opt/llc 通过 |
 | `BE-004a` | primitive target/object/linker probe for the first vertical slice | BE-001a, BE-002a, RT-002b | 用固定 harness object + runtime archive 验证 Linux x86-64 object、确定性 LLD response file 和 C ABI link/run smoke；不冒充完整 snapshot-to-process runner |
-| `BE-003` | object/closure/Rust runtime/EH lowering | BE-002, OBJ-003, EH-001, ADV-001 | status/exception、GC root 和版本化 C ABI contract 的 link/run 测试 |
-| `BE-004` | TargetMachine、object、Rust archive 选择、LLD linker 和跨目标 data layout | BE-003, RT-002 | deterministic response file；x86-64 Linux + 第二目标运行；错误 target/ABI 有 doctor 诊断 |
+| `BE-003a` | object/closure lowering | BE-002, OBJ-000b | 随 VERT-010/012 关闭 layout、field、FuncRef、environment 的 link/run 测试 |
+| `BE-003b` | GC root/safepoint/barrier lowering | BE-002, GC-001a | O2 前后 root/barrier litmus 与运行压力测试 |
+| `BE-003c` | status/exception/invoke/unwind lowering | BE-002, EH-001 | 与 ADV-001 同纵切关闭跨目标 exception/cleanup ABI |
+| `BE-004b` | Phase 3 compile-only second authoritative DataLayout | BE-001, OBJ-000a | object ABI 在两个 DataLayout 上 size-align-offset 一致且 hash 独立 |
+| `BE-004` | 完整第二运行目标、archive 选择和 linker 产品化 | BE-003a/b/c, RT-002 | deterministic response；Linux + 第二目标运行；错误 target/ABI 有 doctor 诊断 |
 | `BE-005` | snapshot/HIR/MIR/LLVM 增量 cache | FE-007, IR-008, BE-002 | provenance key 包含 upstream commit、fork commit、lowering schema/compiler build identity、TargetContext 与 runtime/ABI/layout hashes；缺字段只能 cache miss |
 | `REL-001a` | first-slice case-runner core | FE-005, FE-010a, IR-005a, IR-008a, BE-004a | 单个 `add` case 可隔离、超时、乱序执行并记录 snapshot/HIR/MIR/LLVM/object/executable/output provenance；拥有 `test --stage static-core` 阶段门禁；无需先完成全 handbook release coverage |
+| `REL-001b` | incremental vertical-slice runner growth | REL-001a | VERT-002 起每个新语义纵切同时增加 precise diagnostic/artifact/oracle contract，不等待完整 BE-004 或 Phase 6 |
 | `VERT-001` | Linux x86-64 real-LLVM executable vertical slice (`add(number, number)`) | FND-004a, FE-008a, FE-009a, FE-010a, FE-011a, FE-011b, FE-012a, IR-000a, TC-001a, IR-005a, RT-002b, BE-004a, REL-001a | case runner 执行 validated serialized snapshot-only lowering -> HIR verifier -> resolver/RepresentationPlan join -> MIR verifier -> real LLVM -> object -> LLD -> run；由固定 C ABI harness 输出 IEEE-754 bits，不含对象、GC、EH、字符串 |
 | `REL-002a` | `[complete]` First-slice Node oracle differential harness | VERT-001, REL-001a | `add` source/snapshot/HIR/MIR/output manifest 与锁定 Node oracle 差分通过；capture/replay 不依赖 AST/checker |
-| `REL-001` | 完整 case manifest runner、精确 diagnostic/artifact/oracle 执行与 handbook/AST 覆盖报告 | REL-001a, IR-008, BE-004 | case 可独立/乱序/超时执行；code/stage/span/profile/multiplicity/capability 精确比较；17 章和所有矩阵 R 规则可追溯 |
+| `REL-001` | 完整 case manifest runner、精确 diagnostic/artifact/oracle 执行与 handbook/AST 覆盖报告 | REL-001b, IR-008, BE-004 | case 可独立/乱序/超时执行；code/stage/span/profile/multiplicity/capability 精确比较；17 章和所有矩阵 R 规则可追溯 |
 | `REL-002` | Node/TypeScript/规范 differential runner | BE-004, ADV-004, REL-002a | static subset 可观察结果一致 |
-| `REL-003` | parser/lowering/cleanup fuzz 与隔离执行 | IR-005, RT-005 | timeout/崩溃可复现，非法 IR 不进入 LLVM |
+| `REL-003` | 持续 parser/lowering/differential/cleanup fuzz 与隔离执行 | REL-003a, IR-005, RT-005b | corpus/seed/timeout 可复现，非法 IR 不进入 LLVM，cleanup 恰好一次 |
 | `REL-004` | Go/Rust/LLVM CI 矩阵、性能预算和可复现构建 | BE-005, REL-001, REL-002 | clean build 的 Rust archive、manifest 和最终 artifact digest 稳定 |
 | `REL-005` | profile 发布清单、许可证、ABI/schema 迁移说明 | REL-004 | 只发布通过 conformance 的 profile |
 

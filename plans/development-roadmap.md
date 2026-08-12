@@ -1,8 +1,8 @@
-# ts2bin 六阶段开发计划（含 Phase 1.5 前置门禁）
+# ts2bin 六阶段开发计划（含 Phase 1.5 与 Phase 2.5 门禁）
 
-本计划把 `ast2bingo` 拆成六个可独立验收的阶段，并在前端与 HIR 之间增加一个不可跳过的 Phase 1.5 lowering-readiness 门禁。每阶段都必须增加源码样例、诊断 golden、HIR/MIR golden 和最少一组可运行测试；未通过上一阶段退出条件，不进入下一阶段扩展语法。
+本计划把 `ast2bingo` 拆成六个可独立验收的阶段，在前端与 HIR 之间设置 Phase 1.5 lowering-readiness，并在对象阶段前设置 Phase 2.5 engineering-hardening 门禁。每阶段都必须增加源码样例、诊断 golden、HIR/MIR golden 和最少一组可运行测试；未通过上一阶段退出条件，不进入下一阶段扩展语法。
 
-阶段的输入和产物必须分别对照 [tsgo-integration.md](tsgo-integration.md)、[bingo-ir-spec.md](bingo-ir-spec.md)、[stdlib-runtime-plan.md](stdlib-runtime-plan.md) 和 [testing-conformance-and-release.md](testing-conformance-and-release.md)。实际编码从 [implementation-specification.md](implementation-specification.md) 进入，并同时遵守逐语法 lowering、类型/方差、runtime/backend 和拒绝诊断四份细则。本文件只定义实施顺序，不重复定义这些契约；若路线图与 verifier、capability manifest 或 case manifest 冲突，以后者为准。需要直接拆 issue 时使用 [implementation-backlog.md](implementation-backlog.md)，其中的编号和依赖是执行层契约。
+阶段的输入和产物必须分别对照 [tsgo-integration.md](tsgo-integration.md)、[bingo-ir-spec.md](bingo-ir-spec.md)、[stdlib-runtime-plan.md](stdlib-runtime-plan.md) 和 [testing-conformance-and-release.md](testing-conformance-and-release.md)。实际编码从 [implementation-specification.md](implementation-specification.md) 进入，并同时遵守逐语法 lowering、类型/方差、runtime/backend 和拒绝诊断四份细则。本文件只定义实施顺序，不重复定义这些契约；若路线图与 verifier、capability manifest 或 case manifest 冲突，以后者为准。当前状态和依赖以 [implementation-backlog.md](implementation-backlog.md) 为唯一事实来源；Phase 3 细化以 [phase3-entry-and-hardening.md](phase3-entry-and-hardening.md) 为准。
 
 ## 总体顺序
 
@@ -11,6 +11,7 @@
   -> Phase 1.5 snapshot/lowering 契约闭合
   -> 阶段 2A number-only real-LLVM 纵切
   -> 阶段 2B primitive 控制流与静态核心
+  -> Phase 2.5 output/registry/fuzz 工程加固
   -> 阶段 3 布局/函数/对象/闭包/variance
   -> 阶段 4 模块/泛型/集合/迭代/资源
   -> 阶段 5 runtime-heavy 语义
@@ -64,7 +65,7 @@
 5. `FE-010`：在稳定的 frontend/build-plan 边界上建立首纵切 snapshot-only replay；释放 AST/checker 后，仅用序列化 snapshot 生成 `add(number, number)` 的 canonical HIR/lowering events，并以 readiness registry、manifest metadata 和 malformed negative cases 锁定边界。广泛 runner/fuzz 在 `REL-001/003` 收口。
 6. `IR-000`：收敛 source type plan、typed HIR、specialization fixed point、target representation、CFG/SSA 和 effect verifier 的唯一 DAG。
 
-当前状态按“代码存在”和“验收完成”分开记录。`FE-008/009/010/011` 的 wire 单一 validator、semantic proof、checker-free replay、target/path/profile/cache、no-EH 和 migration regression 已闭合；`IR-000` 的 executor/fixed-point/hooks/dumps 与 validate-snapshot -> typed-HIR production prefix 也已通过既有回归。pinned-fork 交付验收（`FND-004a`）、`FE-012a`、`IR-007a/001a/002a/003a`、`BE-001a`、`RT-002a` 与 `TC-001a` 均已关闭：本地/远端 fork verification、LLVM 20 TargetMachine/object emission、Rust runtime manifest/staticlib/startup、strict TargetContext resolver 与重复构建证据均通过。当前 Phase 2A 下一项为 RepresentationPlan/target-aware MIR；完整 LLVM/object/LLD 纵切与 Node oracle 仍待后续子任务。
+当前状态按“代码存在”“Phase 3 准入”和“发布审计”分开记录。Phase 1.5、Phase 2A、scoped Phase 2B static-core implementation 与 Phase 2.5 本地门禁均已完成；Phase 3 已推进到 `VERT-013b` derived class self-audit 和 `OBJ-003b` private/protected access 的 production LLVM/runner/CLI 接线。`APP-001/CLI-001/VERT-009` 的 self-audit 证据已收口，但仍等待独立 A3 review；自动 CI 由项目负责人延期，因此该 application preview 不能据此进入 Integrated 或 release profile。当前最近门禁是补齐 class-access 的 LLVM 20 Linux authoritative runtime rebuild、ELF/Node differential 与 deterministic artifact evidence；本机 WSL/sysroot 不可用时必须保持 environment-blocked。
 
 ### 退出门槛
 
@@ -126,7 +127,7 @@ export function add(a: number, b: number): number { return a + b; }
 5. 扩展 HIR/MIR verifier 的 dominance、phi、短路、cleanup/effect 规则；实现保序常量折叠，不做跨函数激进优化。
 6. `[complete] APP-001 + CLI-001 + VERT-009`：static-core application entrypoint/startup 与进程退出契约已冻结；真实 source capture 经 snapshot/HIR v8/MIR v6/LLVM/object/LLD 生成 deterministic ELF 与相邻 provenance report，入口使用 `bingo_program_main_v1` 和 manifest-authenticated application startup，未复用 case harness 或函数名到机器码映射。
 
-七条 fixture 纵切与 application build 纵切均已关闭：前七者由 deterministic ELF 独立进程执行并与锁定 Node oracle 差分；VERT-009 从真实项目构建唯一 exported `main(): number`，边界 `0/1/255`、source/HIR/MIR/manifest/startup 负例、versioned LLVM symbol、确定性 ELF/report 和静默精确退出码均有证据。当前 HIR/MIR schema 为 v8/v6。Phase 2B 只关闭 scoped primitive/static-core milestone，不代表完整 `IR-001..008`；property place、owned string/GC、模块和完整 stdlib 仍在后续阶段。
+七条 fixture 纵切已关闭，application build 纵切已完成本地实现与证据但保持 review-blocked：前七者由 deterministic ELF 独立进程执行并与锁定 Node oracle 差分；VERT-009 从真实项目构建唯一 exported `main(): number`，边界 `0/1/255`、source/HIR/MIR/manifest/startup 负例、versioned LLVM symbol、确定性 ELF/report 和静默精确退出码均有本地证据。当前 HIR/MIR schema 为 v8/v6。Phase 2B 只本地关闭 scoped primitive/static-core implementation，不代表完整 `IR-001..008` 或 release-profile milestone；property place、owned string/GC、模块和完整 stdlib 仍在后续阶段。
 
 ### 验收门槛
 
@@ -134,6 +135,12 @@ export function add(a: number, b: number): number { return a + b; }
 - `f64` number、bool、UTF-16 string、null/undefined 的表示固定并有 ABI 测试。
 - 已交付的 nullish 与 local logical-assignment 纵切副作用次数与 TypeScript/JavaScript oracle 一致；property optional-chain/短路/条件 place evaluation 由 Phase 3 `OBJ-000/001/003/006` 关闭。
 - 误用 dynamic、跨域隐式转换和 disjoint assertion 在 HIR 入口被拒绝；任何 malformed golden 都不能到达 LLVM backend。
+
+## Phase 2.5：工程加固与 Phase 3 准入
+
+Phase 2.5 不扩大语言面。`ENG-001` 已让 application ELF/report 通过共享 atomic no-clobber publisher 发布，并在 report 失败时成对回滚；`ENG-002` 已把 primitive lowerer、MIR verifier 和 LLVM emitter 收敛为显式 registry，拒绝 ambiguous lowerer，移除重复 backend admission whitelist，并把新 lowerer 文件纳入 compiler identity hash；`REL-003a` 已增加有固定负例和 256 KiB 上限的严格 snapshot/HIR/MIR decoder fuzz seed。完整 self-audit 见 [phase2b-a3-self-audit-2026-08-11.md](phase2b-a3-self-audit-2026-08-11.md)。自动 CI 保持项目负责人指定的延期状态，但延期期间不得声称 Integrated。`GOV-001` 的独立 A3 review 仍是 application preview 进入 release profile 的前置，不阻塞 Phase 3 implementation entry。
+
+完整顺序、issue 拆分和退出证据见 [phase3-entry-and-hardening.md](phase3-entry-and-hardening.md)。
 
 ## 阶段 3：表示布局、函数、对象、类、闭包与 variance
 
@@ -143,13 +150,14 @@ export function add(a: number, b: number): number { return a + b; }
 
 ### 工作项
 
-1. 先完成 `OBJ-000`：冻结 structural `ObjectView`、aliasing、identity/equality、read/write 和 GC trace/C ABI 规则；再固定 object shape、class layout、method table、field offset、array/tuple layout 和 nullable representation，并由 `bingo-abi` schema 同时生成 Rust `repr(C)`、manifest 和 LLVM layout 契约。
-2. 实现 function value、closure environment、lexical `this`、recursive function 和 indirect call。
-3. 实现 class extends、constructor/super、field initializer、getter/setter、private/protected、static block。
-4. 建立 Bingo variance checker：函数参数逆变、返回协变、可写字段/数组不变、只读集合协变。
-5. 读取 checker 的 variance/assignability/inference 结果，但对 unmeasurable/unreliable 做二次拒绝或生成 adapter thunk。
-6. 支持 object literal、property access、computed constant key、destructuring；动态 property 仍为 R/S2。
-7. 实现显式 `checked_cast`、layout adapter 和可审计的 `unsafeCast` intrinsic。
+1. `OBJ-000a` 已以 `SelfAudited` 冻结 reference identity、aliasing、equality、readonly/write、escape category 和 dynamic boundary；契约、strict decoder/fuzz 与正负例见 [phase3-obj-000a-design-2026-08-11.md](phase3-obj-000a-design-2026-08-11.md)。
+2. `OBJ-000b + BE-004b` 已以 `SelfAudited` 用 Linux x86-64 与 compile-only Linux AArch64 同时冻结 header/shape/field/trace schema；Rust/C/LLVM offset 对照与独立 layout hash 见 [phase3-obj-000b-be-004b-design-2026-08-11.md](phase3-obj-000b-be-004b-design-2026-08-11.md)。
+3. `GC-001a + BE-003b` 已以 `SelfAudited` 在任何 owned object 之前冻结 root liveness、safepoint、dead-slot clearing、write barrier 和双目标 O2 preservation；canonical plan、独立 liveness verifier 与自审证据见 [phase3-gc-001a-be-003b-design-2026-08-11.md](phase3-gc-001a-be-003b-design-2026-08-11.md)。
+4. `RT-006a` 已以 `SelfAudited` 提供单 mutator、STW、precise、non-moving tracing heap、shadow-stack ABI、cycle 回收与 deterministic archive；设计与证据见 [phase3-rt-006a-design-2026-08-11.md](phase3-rt-006a-design-2026-08-11.md)。
+5. `OBJ-001a + OBJ-006a + BE-003a + VERT-010` 已按 [设计/自审](phase3-vert-010-design-2026-08-11.md) 以 `SelfAudited` 关闭 object literal、静态 property read/write、identity 和 alias observable semantics，并经真实 ELF/Node 差分。
+6. `IR-006b + OBJ-003a/006b + VERT-011` 已按 [设计/自审](phase3-vert-011-design-2026-08-11.md) 以 `SelfAudited` 关闭 computed key、getter、optional chain 与 property logical assignment 的 PlaceRef 单次求值。
+7. `OBJ-002a + BE-003a + VERT-012` 已按 [设计/自审](phase3-vert-012-design-2026-08-11.md) 以 `SelfAudited` 关闭首个 escaping mutable capture、by-cell environment、capture root lifetime 与 indirect call；lexical `this`、递归、嵌套环境和 adapter 留给后续独立纵切。
+8. `VERT-013a/013b` 已关闭 base/derived class、constructor/super、field initializer 与 receiver identity；`OBJ-003b` private/protected access 已完成 canonical authorization、HIR/MIR/layout/bound MIR、LLVM emitter、runner 和 CLI 接线，待 Linux authoritative runtime/ELF 证据后完成本地状态提升。`OBJ-004` 已以 `SelfAudited` 关闭 per-declaration proof、真实 checker-free interface replay、nested generic/SCC、cross-module type relation、layout equality 与 canonical HIR direct-reuse gate；`OBJ-005` 已进入 Implementing，首个 readonly ObjectView 已具备真实 frontend snapshot→proof/HIR/MIR/backend/LLVM/harness/Node 链，但 Linux native differential 与 accessor receiver 证据仍待关闭，checked cast、copy adapter 和可审计 `unsafeCast` 继续按独立增量推进。可写字段/数组保持不变，方法 bivariance 不穿过 ABI。
 
 ### 验收门槛
 
@@ -170,17 +178,17 @@ export function add(a: number, b: number): number { return a + b; }
 2. 擦除 `import type`、纯类型导出和声明文件；为外部实现建立 FFI declaration contract。
 3. 实现按表示分组的泛型单态化；加入递归深度、实例数量和代码尺寸上限。
 4. 支持 generic constraint、default/const type parameter、in/out variance、泛型函数/类/接口的 HIR 实例化。
-5. 实现 enum/const enum、tuple、array、readonly view、Map/Set 基础 runtime ABI。
-6. 将 `for...of`、迭代器、array fast path、object/array spread 和解构连入 runtime。
-7. 实现 `using`/`await using` 的 cleanup stack、`Disposable`/`AsyncDisposable` ABI。
+5. `RT-003a` 在 `RT-006a` 后实现 owned UTF-16 string、array/tuple 和 readonly view；`RT-003b` 再实现 Map/Set，borrowed UTF-16 继续沿用 Phase 2 契约。
+6. `RT-004a` 先关闭同步 `for...of`、iterator close、spread 和解构的 normal/break/continue/return；throw/finally 路径拆为依赖 EH 的 `RT-004b`。
+7. `RT-005a` 只实现同步 `using` 的正常和结构化控制流 cleanup；throwing cleanup 为 `RT-005b`，`await using` 为依赖 async 的 `RT-005c`。
 8. 为每个标准库调用查询 [stdlib-runtime-plan.md](stdlib-runtime-plan.md) 的 capability manifest；声明存在但 runtime 未实现时在编译期报错。
-9. 建立 `RT-007a` self-hosted stdlib HIR/package 种子，只接入不分配、不抛出、不挂起且不依赖 owned storage 的 Array/String/Set/Iterator 算法；普通 specialization、verifier、deterministic package hash 和 dead-strip 全部适用。
+9. 建立 `RT-007a` self-hosted stdlib HIR/package 种子，只接入不分配、不抛出、不挂起且不依赖 owned storage 的算法；package format 不再反向依赖 owned collection runtime，普通 specialization、verifier、deterministic package hash 和 dead-strip 全部适用。
 
 ### 验收门槛
 
 - 多文件 ESM 样例（含循环依赖）初始化顺序稳定，重复导入只执行一次。
 - 泛型实例化不会把 unresolved type parameter 留到 MIR；超限有可定位诊断。
-- `for...of`、spread、using 在正常返回、break/continue、throw、finally 路径都正确清理。
+- Phase 4 退出只要求 `RT-004a/005a` 的同步 normal/break/continue/return 清理；throw/finally 由 `RT-004b/005b` 随 EH 纵切关闭，`await using` 由 `RT-005c` 随 async 纵切关闭。
 - `const enum` 只在可证明常量和边界安全时内联。
 - `core-es2020` 等 manifest 的 capability 闭包、ABI hash 和缺失项报告可在 `ts2bin doctor` 中复现。
 - Phase 4 的 self-hosted 退出只证明 seed package；依赖分配、GC、异常或 async 的算法不得据此标记为 complete。
@@ -193,14 +201,14 @@ export function add(a: number, b: number): number { return a + b; }
 
 ### 工作项
 
-1. 先完成 `EH-001` 的全链 status/exception-carrier ownership 与 target bridge 契约，再在 Rust `bingo-rt` workspace 中实现异常 ABI：普通 helper 返回 status/exception handle，LLVM 与极薄平台 shim 负责 throw、try/catch/finally、invoke/unwind、cleanup 和目标 personality；Rust panic 不表达语言异常。
+1. 先完成 `EH-001` 的全链 status/exception-carrier ownership 与 target bridge 契约，再由 `BE-003c + ADV-001 + RT-004b/005b` 同一纵切实现异常 ABI、invoke/unwind、IteratorClose 和 throwing cleanup；Rust panic 不表达语言异常。
 2. 在独立 Rust crate 中实现 Promise/microtask 原语，并与 async/await 状态机、错误 continuation、top-level await（若模块 profile 开启）连接。
 3. 实现 generator/`yield`/`yield*` frame；如果目标 runtime 不完整，保持默认 R。
 4. 以独立 Rust crate/capability 实现 BigInt、RegExp、Symbol、动态属性、`instanceof`、abstract equality 等 runtime 模块；重型 engine 和数据版本必须锁定。
 5. 标准 decorator 与 legacy decorator 分开，固定 metadata、initializer 和执行顺序。
 6. JSX 先按 checker 解析 factory/fragment，再走普通调用；建立最小 JSX runtime。
 7. dynamic profile：`DynamicValue`、属性字典、外部 JS/Node/FFI boundary、显式 checked cast 和诊断统计。
-8. 先完成 `GC-001` 的 single-mutator、safepoint active-root/dead-slot 和 optimizer barrier 契约，再接入 Rust 非移动 tracing GC；`Gc<T>` 不等于 root，unsafe、root、barrier 和 FFI 边界按 [rust-runtime-and-linking.md](rust-runtime-and-linking.md) 审计。ARC/arena 只实现为带无环证明和 capability 限制的受限 profile。
+8. 在 Phase 3 `GC-001a/RT-006a` 最小 heap 基础上扩展完整 `GC-001/RT-006`：async frame、弱引用前置、压力预算和 FFI root 边界；`Gc<T>` 不等于 root。ARC/arena 只实现为带无环证明和 capability 限制的受限 profile。
 9. 在 RT-006 与 ADV-001 闭合后完成 `RT-007b`：把需要 owned storage、分配、异常或清理的核心 self-hosted stdlib 算法接入同一 package/verifier，形成可发布闭包。
 
 ### 验收门槛
@@ -215,17 +223,17 @@ export function add(a: number, b: number): number { return a + b; }
 
 ### 目标
 
-把经过 MIR verifier、对象/runtime/EH 契约闭合的程序稳定生成 LLVM IR、目标文件和可执行产物，建立版本固定、差分测试、性能和发布流程。阶段 2 的 `VERT-001` 只证明 primitive real-LLVM 链路，不等于本阶段的产品 backend 完成。
+把各阶段已经随纵切增长的 LLVM/object/link 能力产品化，建立优化、缓存、完整第二运行目标、差分测试、性能和发布流程。Phase 6 不再首次实现对象、GC 或 EH backend lowering；它们分别由 `BE-003a/003b/003c` 与对应语义纵切闭合。
 
 ### 工作项
 
 1. 使用 `tinygo.org/x/go-llvm` 建立 backend context/module/builder wrapper；固定 LLVM 大版本，首版优先 LLVM 20。
-2. 将 MIR 类型、block、phi、call/invoke、global、debug/source metadata 映射为 LLVM IR；每个函数生成后立即局部检查。
+2. 完成通用 MIR operation/type/effect emitter registry、global、debug/source metadata 与优化 pipeline；对象、GC、EH emitter 已由早期纵切提供并在此统一产品化。
 3. 运行 `VerifyModule`、PassBuilder/`default<O2>`，再用 TargetMachine 输出 bitcode/object/assembly。
 4. 用锁定 Cargo/rustc 构建 `bingo-rt` 原生 static archives，固定 `extern "C"` calling convention、data layout、allocator、GC/写屏障、panic/status、异常和线程模型。
 5. 实现 incremental cache：source/config/frontend snapshot hash -> HIR/MIR/LLVM artifact；cache key 必须含 LLVM/runtime ABI 版本。
 6. 做 TypeScript/JavaScript oracle 差分、LLVM verifier、fuzz、compile-fail、性能和二进制可复现测试。
-7. 设计 Windows/WSL2、Linux、macOS 的构建矩阵；锁定 Rust targets 和 LLD driver。原生 Windows 的 go-llvm/cgo 绑定失败应给出明确环境诊断，但 runtime staticlib 构建和 frontend job 必须独立可验证。
+7. 在 Phase 3 compile-only second DataLayout 证据上增加至少一个第二运行目标，并完善 Windows/WSL2、Linux、macOS 构建矩阵。自动 CI 的重新启用时间由项目负责人决定，但启用并通过前不得进入 Integrated/ReleaseCandidate。
 8. 按 [testing-conformance-and-release.md](testing-conformance-and-release.md) 接入 case manifest、Node/规范差分、fuzz、cache provenance 和可复现构建门禁。
 
 ### 验收门槛

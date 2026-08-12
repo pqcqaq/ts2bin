@@ -38,7 +38,7 @@
 | 默认字符串 | UTF-16 code unit |
 | 默认方差 | 函数参数逆变、返回协变、可写位置不变 |
 
-当前 `ts2bin.lock.json` 已记录 snapshot schema 2、Bingo HIR schema 2、no-EH 默认值、`pqcqaq/typescript-go` fork remote、固定 fork commit 和 reviewed upstream ancestor；compatibility/snapshot/options baseline 的有意 UTF-8 wire 变化已审查并通过回归。Phase 1.5 实现契约以及 `FE-012a` 与 `IR-007a/001a/002a/003a` 已关闭；fork 迁移后的本地 doctor、frontend/全仓回归、隔离 test/vet、replay 双构建、远端 fetch/full test/vet 和 committed-parent clean-clone 已通过。第一条纵切使用 `exceptions=none`；`ResolveBuildPlan` 对 `llvm-eh` 的早期拒绝只表示当前 no-EH lowering/schema 边界，不是工具链可用性探测。status/native-unwind 契约须在进入异常实现前单独冻结，其他 target/runtime availability 统一留给 `TC-001a`。
+当前 `ts2bin.lock.json` 已记录 snapshot schema 2、primitive Bingo HIR schema 8、primitive first-slice MIR schema 6、no-EH 默认值、`pqcqaq/typescript-go` fork remote、固定 fork commit、reviewed upstream ancestor 和当前 runtime source identity；owned-object VERT-010 使用独立 HIR v9/MIR v7 reader，PlaceRef VERT-011 使用独立 HIR v10/MIR v8 reader。Phase 1.5、Phase 2A 与 scoped Phase 2B implementation 已完成本地门禁；application preview 仍因独立 A3 review 缺失而 review-blocked，自动 CI 由项目负责人延期。Phase 2.5 已关闭 ELF/report 失败回滚、lowerer/verifier registry 和 strict decoder fuzz seed。Phase 3 至 `VERT-011` 已达到 `SelfAudited`，下一顺序为 `VERT-012`；`ResolveBuildPlan` 对 `llvm-eh` 的拒绝仍只表示 no-EH contract，status/native-unwind 必须由 `EH-001 + ADV-001 + BE-003c` 独立纵切冻结。
 
 禁止以“tsgo parser 能解析”代替“Bingo 可以生成安全本机代码”。支持级别仍使用 S0/S1/S2/C/P/R。
 

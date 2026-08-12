@@ -16,13 +16,19 @@
 10. [unsupported-semantics-and-diagnostics.md](unsupported-semantics-and-diagnostics.md)：必须拒绝的行为、profile 边界、诊断编号和能力准入门禁。
 11. [stdlib-runtime-plan.md](stdlib-runtime-plan.md)：`handbook/stdlib` 与 `typescript-go` 内置 `.d.ts` 到 capability manifest、runtime ABI 和 GC 的映射。
 12. [development-roadmap.md](development-roadmap.md)：六阶段实施顺序、依赖、交付物、验收门槛和 issue 分组。
-13. [testing-conformance-and-release.md](testing-conformance-and-release.md)：测试资产、差分/fuzz、标准库覆盖、CI、缓存和发布门禁。
-14. [implementation-backlog.md](implementation-backlog.md)：可直接创建 issue 的编号、依赖、验收命令和第一条纵向实现路径。
-15. [compiler-development-process.md](compiler-development-process.md)：从 issue 分诊、设计、实现、自审、审计到合并和发布的强制流程。
-16. [coding-and-maintainability-standards.md](coding-and-maintainability-standards.md)：抽象准入、核心流程注释、公共 API 文档、错误和生命周期规范。
-17. [test-authoring-standards.md](test-authoring-standards.md)：测试库、fixture、golden、独立性、乱序/并发/重复运行规范。
-18. [git-and-commit-standards.md](git-and-commit-standards.md)：父仓库/submodule、分支、提交消息、合并和发布标签规范。
-19. [development-audit-2026-08-05.md](development-audit-2026-08-05.md)：方向审计、Phase 1.5 前置门禁和后续依赖调整。
+13. [phase3-entry-and-hardening.md](phase3-entry-and-hardening.md)：Phase 2.5 工程加固、Phase 3 对象/GC/PlaceRef 纵切和 runtime/EH 重排。
+14. [phase3-vert-013a-design-2026-08-11.md](phase3-vert-013a-design-2026-08-11.md)：首个 base class/constructor/receiver-bound method 纵切设计与拒绝边界。
+14. [phase3-vert-011-design-2026-08-11.md](phase3-vert-011-design-2026-08-11.md)：computed key、accessor、optional property 和 logical assignment 的 PlaceRef 单次求值设计。
+14. [phase3-obj-000a-design-2026-08-11.md](phase3-obj-000a-design-2026-08-11.md)：`OBJ-000a` 对象 identity/alias/property conversion/escape 的目标无关语义契约、自审与本地证据。
+15. [phase3-obj-000b-be-004b-design-2026-08-11.md](phase3-obj-000b-be-004b-design-2026-08-11.md)：`OBJ-000b + BE-004b` 双 DataLayout 对象 header/shape/property/trace ABI、跨语言对照与自审证据。
+14. [phase2b-a3-self-audit-2026-08-11.md](phase2b-a3-self-audit-2026-08-11.md)：Phase 2B D3/A3 self-audit、证据矩阵和独立审计交接清单。
+15. [testing-conformance-and-release.md](testing-conformance-and-release.md)：测试资产、差分/fuzz、标准库覆盖、CI、缓存和发布门禁。
+16. [implementation-backlog.md](implementation-backlog.md)：可直接创建 issue 的编号、依赖、验收命令和第一条纵向实现路径。
+17. [compiler-development-process.md](compiler-development-process.md)：从 issue 分诊、设计、实现、自审、审计到合并和发布的强制流程。
+18. [coding-and-maintainability-standards.md](coding-and-maintainability-standards.md)：抽象准入、核心流程注释、公共 API 文档、错误和生命周期规范。
+19. [test-authoring-standards.md](test-authoring-standards.md)：测试库、fixture、golden、独立性、乱序/并发/重复运行规范。
+20. [git-and-commit-standards.md](git-and-commit-standards.md)：父仓库/submodule、分支、提交消息、合并和发布标签规范。
+21. [development-audit-2026-08-05.md](development-audit-2026-08-05.md)：方向审计、Phase 1.5 前置门禁和后续依赖调整。
 
 建议的阅读方式是先读架构确定边界，再读 tsgo 集成和支持矩阵锁定输入；实现 HIR/MIR 时以 IR 规格和 [development-audit-2026-08-05.md](development-audit-2026-08-05.md) 的前置门禁为约束；进入 runtime 或 LLVM 阶段前，必须同时满足标准库 capability 和测试发布文档的门禁。
 
@@ -60,7 +66,7 @@ TypeScript source
 - 普通 TypeScript 对象允许循环引用，general static profile 默认使用非移动 tracing GC；ARC/arena 只能作为有额外可证明约束的受限 profile。
 - `Array<T>` 的可变元素默认不变，`ReadonlyArray<T>` 和只读字段才允许协变；tsgo 的历史兼容性结果不能直接当作 Bingo 布局安全证明。
 - `typescript-go` 的现行交付来自 `pqcqaq/typescript-go` 的固定 fork commit；lock 同时记录 reviewed Microsoft upstream ancestor，更新通过显式 upstream merge 与完整 compatibility gate。旧 patch/materialize/apply 机制已经退役，仅可作为标明已废弃的历史证据出现。
-- Phase 1.5、Phase 2A 与 scoped Phase 2B static-core milestone 已关闭；除七条 fixture 纵切外，`APP-001 + CLI-001 + VERT-009` 已让真实 source project 通过 HIR v8/MIR v6、LLVM/object/LLD 生成 deterministic Linux x86-64 ELF 与相邻 provenance report。该 preview 只接受唯一 exported parameterless `main(): number` 返回 `0..255` canonical integer literal，不是 Phase 6 通用 backend。完整 property/computed-key/getter/optional-chain 单次求值仍依赖 Phase 3 object/place contract；owned string、GC、对象、EH、async、模块、完整 self-hosted stdlib 和第二目标仍按后续阶段边界 blocked。
+- Phase 1.5、Phase 2A 与 scoped Phase 2B static-core implementation 已本地关闭；`APP-001 + CLI-001 + VERT-009` 仍等待独立 A3 review，自动 CI 由项目负责人延期，因此当前不能据此声称 Integrated 或 release ready。Phase 2.5 已补 ELF/report 失败回滚、lowerer/verifier registry 和 snapshot/HIR/MIR fuzz seed。Phase 3 的对象/GC 基础与 `VERT-010..013b` 已达到本地 `SelfAudited`，`OBJ-003b` private/protected access 已完成到 production LLVM/runner/CLI 接线；其 Linux authoritative runtime rebuild 与 ELF differential 仍受本机 WSL/sysroot 环境限制，不能提前提升状态。
 
 ## 交付物与唯一事实来源
 

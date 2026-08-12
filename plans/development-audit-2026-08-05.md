@@ -1,5 +1,7 @@
 # 2026-08-05 开发方向审计与后续计划调整
 
+> Historical audit checkpoint. Its “current/next” wording records the 2026-08-05 state and is superseded by [implementation-backlog.md](implementation-backlog.md) and [phase3-entry-and-hardening.md](phase3-entry-and-hardening.md).
+
 ## 1. 结论
 
 总体技术方向正确，继续采用：
@@ -16,7 +18,7 @@ typed HIR + TargetContext
   -> Rust runtime C ABI + LLD
 ```
 
-不需要改成从 AST 直接生成 LLVM，也不需要引入完整 JavaScript engine 作为 static profile 的基础。Phase 1.5 的实现契约与后续 Phase 2A 入口契约已经关闭；现行交付已迁移到 `pqcqaq/typescript-go` 固定 fork commit，本地 doctor、frontend/全仓回归、隔离 fork test/vet、replay 双构建、远端 fork verification 和 committed-parent clean-clone 均已通过。当前下一步仍是并行的 LLVM TargetMachine/DataLayout 与 Rust runtime-manifest scaffold，primitive real-LLVM 纵切尚未完成，闭合前绝不扩大语法面。当前详细契约、证据状态和依赖调整以第 10.6 节为准。
+不需要改成从 AST 直接生成 LLVM，也不需要引入完整 JavaScript engine 作为 static profile 的基础。在本审计检查点，下一步是并行的 LLVM TargetMachine/DataLayout 与 Rust runtime-manifest scaffold；该历史顺序后来已经完成。现行状态和下一步不再由本审计文档维护，以 backlog 与 Phase 3 entry plan 为准。
 
 ## 2. 审计证据
 

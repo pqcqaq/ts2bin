@@ -1,6 +1,6 @@
 # Phase 2B Application Build Preview Design
 
-Status: implemented and locally verified under the project owner's Phase 2 directive. External A3 review remains required before a release profile can consume this preview.
+Status: locally verified and self-audited, but review-blocked. The evidence matrix is recorded in [phase2b-a3-self-audit-2026-08-11.md](phase2b-a3-self-audit-2026-08-11.md). External A3 review remains required before this D3 change can become Integrated or be consumed by a release profile. Automatic CI activation is intentionally deferred by the project owner.
 
 ## Issue Brief
 
@@ -64,6 +64,7 @@ Positive and boundary evidence:
 
 - real project `main` returning 0, 1 and 255;
 - repeated build produces byte-identical LLVM object, ELF and report hashes;
+- report encode/publication failure removes the already published ELF, leaving neither final output path;
 - produced ELF has no stdout/stderr and returns the exact source status;
 - LLVM symbol is `bingo_program_main_v1`, never C `main`.
 
@@ -75,7 +76,7 @@ Negative evidence:
 - substituted application startup object, runtime archive or manifest;
 - old HIR v7 and MIR v5 artifacts are rejected by the new decoder.
 
-Required local gates are focused Go tests, LLVM 20 WSL tests, runtime ABI generation check, runtime rebuild/manifest regeneration, `doctor`, deterministic repeated build and `git diff --check`. GitHub workflows remain disabled by project direction.
+Required local gates are focused Go tests, LLVM 20 WSL tests, runtime ABI generation check, runtime rebuild/manifest regeneration, `doctor`, deterministic repeated build, report-publication failure injection and `git diff --check`. Automatic GitHub workflow triggers remain disabled by project direction; local evidence cannot substitute for the pending independent A3 review or future Integrated-state CI evidence.
 
 ## Alternatives and Rollback
 

@@ -126,7 +126,7 @@
 
 ## Phase 1.5 与调整后主链（2026-08-06）
 
-`FE-012a`、`IR-007a -> IR-001a -> IR-002a -> IR-003a -> IR-004a/005a -> IR-008a`、`BE-001a`、`RT-002a` 与 `TC-001a` 已关闭；当前进入固定 ABI、real LLVM lowering、object/LLD 与 runner。`BuildPlan` 只表示绑定 frontend hash 的 canonical unresolved request；resolver 只语义消费 BuildPlan/toolchain/runtime manifests，产出 immutable `TargetContext`、LLVM TargetMachine 的权威 `DataLayout` 和 `AvailableCapabilityCatalog`。typed envelope 原样保留 HIR，首次 HIR/target provenance join 已在 `RepresentationPlan` 完成；capability binding 已从 structural target-aware MIR 产出显式空 `BoundCapabilityClosure`。完整 `IR-001..007` 与广泛 HIR/语法开发继续等待 real-LLVM 纵切反馈，MIR/backend 不得直接消费未解析 BuildPlan。
+Phase 1.5、Phase 2A、scoped Phase 2B static-core implementation 与 Phase 2.5 已完成本地门禁，Phase 3 已进入实现。primitive HIR/MIR 保持 v8/v6，Phase 3 纵切使用独立 schema major；对象、GC、owned object、PlaceRef、closure、base/derived class 以及 private/protected access 均已有本地 self-audit。`APP-001/CLI-001/VERT-009` 仅在 Integrated/release-profile consumption 上因独立 A3 review 未完成保持 `review-blocked`；自动 CI 由项目负责人延期。当前未完成的是 class-access 的 Linux authoritative runtime rebuild/ELF differential（受本机 WSL/sysroot 环境限制）以及后续 closure/class 语义扩展。
 
 | ID | 当前状态 | 结果/退出条件 |
 | --- | --- | --- |
@@ -142,15 +142,16 @@
 | `IR-000` | complete | executor/fixed-point/budget/pre-post/effect/dump golden 与 validate-snapshot -> typed-HIR production prefix 已通过核心、race、frontend stage 和全仓 regression；typed HIR 之后的 TargetContext/handlers 与真正 MIR verifier属于 Phase 2A |
 | `FE-012a` | complete | `Frontend.Build` 返回 canonical 深拷贝 sealed snapshot；返回 diagnostics 与 snapshot 脱离；公共 subset gate 自行完整验证，production replay 对 in-memory/serialized/frontend-wrapper 的重哈希 flags/modifiers/type-closure 篡改全部 fail closed |
 | `IR-007a` | complete | number contract v1 固定 binary64、canonical qNaN、保留 `-0`、RNE/no-fast-math `+`、`extern "C" double add(double,double)` 与 ABI bits observation；alternative contract fail closed |
-| `IR-001a/002a/003a` | complete | Phase 2A 的 HIR major 2、完整 `CompilerBuildIdentity`、identity-free source plan、logical requirements、number-only canonical lowering 与 negative tests 已闭合；Phase 2B 多函数/direct-call contract 后当前 HIR/lock major 为 3 |
+| `IR-001a/002a/003a` | complete | Phase 2A 的 HIR major 2 已冻结保留；Phase 2B 经过多函数/CFG/nullish/string/application reader changes 后当前 HIR/MIR 为 v8/v6，旧 major rejection 已同步 |
 | Typed artifact envelope substrate | complete | `PassArtifactEnvelope` 已提供 role/schema/payload-bound canonical digest、immutability 与 executor transition checks；resolver 不把 HIR误列为语义输入，RepresentationPlan 才声明首次 join；这只是 `TC-001a` 基础设施 |
 | `BE-001a`, `RT-002a` | complete | Go-LLVM 20.1.8 TargetMachine/DataLayout 与 deterministic ELF object emission 已闭合；Rust 1.97.1 workspace、ABI schema、empty startup、唯一 umbrella staticlib、runtime manifest 与重复构建 byte identity 已闭合 |
 | `TC-001a` | complete | resolver 只读取 BuildPlan/toolchain/runtime manifests；生产 handler 绑定真实 TargetMachine，输出 immutable TargetContext、authoritative DataLayout 与非空 AvailableCapabilityCatalog，并原样保留 opaque HIR sidecar |
 | `IR-004a/005a` | complete | RepresentationPlan 已首次 join HIR/BuildPlan/TargetContext provenance；target-aware 单 block f64 MIR、structural/final verifier 与显式空 add BoundCapabilityClosure 已由 LLVM 20 end-to-end pass pipeline 验证 |
 | `IR-008a` | complete | 为已验证 first-slice HIR/MIR 提供 canonical JSON/text emit、schema-aware diff、显式 case manifest 与 verify CLI；Linux LLVM 20 与 Windows fail-closed 验收通过 |
 | `RT-002b`, `BE-002a/004a`, `REL-001a`, `VERT-001`, `REL-002a` | complete | 固定 C ABI、real LLVM/object/LLD、最小 runner 与 Node differential 已通过真实 CLI 验收 |
-| Phase 2B: primitive control flow | in progress | `choose`、`classify`、`calllocal`、`loop`、`coalesce`、local `coalesceAssign` 与 borrowed UTF-16 `stringLength` 均完成 snapshot/HIR/MIR/LLVM/object/harness/process/Node 全链；HIR/MIR 已升为 v7/v5。下一里程碑为 APP-001/CLI-001 受限 application entrypoint/build preview；property place 进入 Phase 3，owned string/GC 后移 |
-| `OBJ-000`, `GC-001`, `EH-001` | pending | 分别在对象、GC、异常实现前冻结 alias/identity/ABI、root liveness/O2 和 status/unwind bridge |
-| Broad Phase 2+ | blocked | 第一真实纵切通过后再扩对象/runtime/modules/generics/EH/async/第二目标 |
+| Phase 2B: primitive control flow | complete for Phase 3 entry / release review-blocked | 七条 primitive/static-core 纵切和 APP-001/CLI-001/VERT-009 已完成本地实现、负例与 self-audit；独立 A3 只阻塞 Integrated/release profile |
+| Phase 2.5 hardening | complete | `ENG-001/002 + REL-003a` 已关闭 atomic no-clobber output/rollback、unique registry、lowering identity coverage 和 bounded strict decoder fuzz；自动 CI 保持 owner-deferred |
+| Phase 3 entry | in progress | `OBJ-000a`、`OBJ-000b/BE-004b`、`GC-001a/BE-003b`、`RT-006a`、`VERT-010..013b` 与 `OBJ-004` 已完成本地 `SelfAudited`/实现门禁；`OBJ-005` readonly data-property ObjectView 已接通真实 snapshot 到 LLVM 的 production 链，Linux native 与 accessor/cast/adapter 后续增量仍按 backlog 推进；class-access/ObjectView 的 authoritative runtime/ELF 证据受 WSL/sysroot 环境限制待补 |
+| `EH-001` | pending | 在 RT-004b/005b 与 ADV-001/BE-003c 同一异常纵切前冻结 status/unwind bridge |
 
-当前验证备注：`go list -deps ./cmd/ts2bin-replay` 已证明 production replay 不携带 parser/checker/AST；现行交付使用 `pqcqaq/typescript-go` 固定 fork commit，旧 patch/materialize/apply 机制不再是活跃路径。Phase 2A 已通过 real LLVM/object/LLD/Node 纵切并退出；Phase 2B 的 boolean contract 与 snapshot/HIR/CFG 首节点已通过定向、shuffle、race、相关包 test/vet。不要重复开发已存在的 registry/executor/envelope，下一依赖固定为 `IR-004b/005b + BE-002b`。
+当前验证备注：production replay 依赖闭包仍不携带 parser/checker/AST；现行交付使用远端可获取的固定 fork commit。Phase 2.5 Windows tests/vet/race、四个 seed fuzz、WSL LLVM-tag tests、runtime deterministic rebuild、真实 application deterministic build 和 LLVM/Rust smoke 均通过。后续不得继续向中心 switch/whitelist 追加 fixture 分支，应通过 registry 和通用 operation/type/effect/place verifier 扩展；完整证据见 `plans/phase2b-a3-self-audit-2026-08-11.md`。

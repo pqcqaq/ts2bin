@@ -334,11 +334,12 @@ full conformance
 | 阶段 1 前端锁定 | facade、诊断、snapshot、Kind manifest、ModuleGraph | A2 implementation + upstream compatibility |
 | Phase 1.5 lowering contract | 单一 serialized validator、semantic proof、target/cache、checker-free replay、pass contract、最终 clean delivery | A2 frontend/IR boundary + reproducibility |
 | 阶段 2A first slice | number-only HIR/MIR、empty startup、real LLVM/object/LLD、runner/Node differential | A2 semantic/IR + A4 executable provenance |
-| 阶段 2B 静态核心 | bool/变量/调用/general CFG、更多 primitive、单次求值 | A2 semantic/IR |
-| 阶段 3 对象与方差 | layout、closure、class、variance、adapter | A3 layout/type-safety |
-| 阶段 4 模块与核心 runtime | module init、泛型、集合、iterator、cleanup、capability | A3 runtime/ABI |
-| 阶段 5 高级 runtime | EH、Promise、async、generator、decorator、JSX、dynamic | A3 runtime/interop |
-| 阶段 6 LLVM 产品化 | backend、target、link、cache、CI、conformance、reproducibility | A4 release |
+| 阶段 2B 静态核心 | bool/变量/调用/general CFG、更多 primitive、局部单次求值 | A2 semantic/IR；application D3 另需 A3 |
+| Phase 2.5 工程加固 | output rollback、registry、strict decoder fuzz seed、状态同步 | A2 maintainability；不扩大语言面 |
+| 阶段 3 对象与方差 | object semantics、双 DataLayout、root/O2、minimal tracing heap、property/closure/class/variance | A3 layout/type-safety/runtime ABI |
+| 阶段 4 模块与核心 runtime | module init、泛型、owned collection、同步 iterator/cleanup、capability | A3 runtime/ABI |
+| 阶段 5 高级 runtime | EH + throwing cleanup、Promise/async + await using、generator、decorator、JSX、dynamic | A3 runtime/interop |
+| 阶段 6 LLVM 产品化 | 通用优化/backend registry、第二运行目标、cache、CI、conformance、reproducibility | A4 release |
 
 阶段只能在 [development-roadmap.md](development-roadmap.md) 的退出条件和 [testing-conformance-and-release.md](testing-conformance-and-release.md) 的覆盖报告同时满足时标记完成。
 

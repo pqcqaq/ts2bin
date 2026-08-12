@@ -81,7 +81,7 @@ foo.expect.out
 - first-slice determinism 使用全新 Frontend/VFS、fresh serialization、独立进程重复输出和显式 evaluation-order proof；在同一实例上重复 Build 不是充分证据。
 - canonical pass prefix、pre/post verifier 和 tamper cases 必须证明 snapshot/source-plan/HIR 不能跳步或伪造完成状态。
 
-精确 diagnostic oracle、完整 handbook/AST case manifest 和 artifact/oracle execution 在 `REL-001` 闭合；更广泛的并发度/Unicode/跨平台组合与 fuzz 在 `REL-003`/`REL-004` 闭合。它们不能被省略，但不反向扩大 Phase 1.5 的 frontend-to-lowering contract。
+精确 diagnostic oracle、完整 handbook/AST case manifest 和 artifact/oracle execution 在 `REL-001` 闭合。Phase 2.5 `REL-003a` 已把 size-bounded seed fuzz 提前到严格 FrontendSnapshot/ProgramSnapshot/HIR/MIR decoder；持续 corpus、Unicode/path、differential 与 cleanup fuzz 仍由 `REL-003/004` 闭合。它们不能被省略，但不反向扩大 Phase 1.5 的 frontend-to-lowering contract。
 
 ### 3.3 HIR/MIR
 
@@ -175,6 +175,8 @@ Promise、iterator、dispose、Temporal、Intl 等使用标准测试向量或独
 
 ## 7. Property/fuzz 测试
 
+Phase 2.5 基线已经包含 `FrontendSnapshot`、`ProgramSnapshot`、Phase 2 HIR 与 structural MIR strict decoder 的 seed fuzz 和 canonical round trip；snapshot 输入上限为 256 KiB，HIR/MIR 为 1 MiB，防止默认多 worker fuzz 放大无界解析成本。每个后续 schema/operation/layout 扩展必须同步增加 seed；nightly/sustained fuzz、最小化 corpus 和跨平台组合仍属于 `REL-003/004`。
+
 - scanner/parser fuzz：输入大小、嵌套深度和超时有上限，保证无 panic/死循环。
 - snapshot fuzz：随机 AST Kind 组合只能得到稳定诊断或合法 snapshot。
 - snapshot validator fuzz：随机破坏 semantic reference、parent/root graph、assertion/flow proof、config/provenance digest 和 canonical JSON，只能稳定拒绝，不能 panic 或接受假证明。
@@ -230,6 +232,8 @@ runtime/gc/exceptions/overflow/bounds/emit options
 
 ## 10. CI 矩阵
 
+自动 workflow trigger 当前由项目负责人明确延期，现有手动 workflow 保持不变。下表仍是进入 Integrated/ReleaseCandidate 前必须恢复并通过的目标矩阵；延期期间的本地结果只能支持 LocalVerified/SelfAudited，不能替代 CI 证据。
+
 | Job | 环境 | 重点 |
 | --- | --- | --- |
 | clean-clone | fresh checkout + recorded fork remote | gitlink/fork/lock 可获取；无 dirty/untracked 依赖；Phase 1 全门禁 |
@@ -278,9 +282,10 @@ P0  [complete] Phase 2A: FE-012a + IR-007a/001a/002a/003a
     || [complete] BE-001a || RT-002a
     -> TC-001a -> IR-004a/005a
     -> RT-002b + BE-002a/004a -> REL-001a -> VERT-001 -> REL-002a
-P1  [complete, scoped] Phase 2B: seven primitive/static-core fixtures + APP-001/CLI-001/VERT-009
-P2  [ready] Phase 3 object/place/closure/variance, including deferred full IR-006 property evaluation
-P3  full BE/REL productization, second target, broad fuzz/performance/release matrices
+P1  [complete for Phase 3 entry; release review-blocked] Phase 2B: seven primitive fixtures + APP-001/CLI-001/VERT-009
+P1  [complete] Phase 2.5: ENG-001/002 + REL-003a; automatic CI remains owner-deferred
+P2  [in progress; OBJ-000a/000b + BE-004b, GC-001a/BE-003b and RT-006a self-audited] Phase 3: VERT-010/011/012
+P3  full BE/REL productization, second running target, sustained fuzz/performance/release matrices
 ```
 
 每个 issue 必须引用：矩阵行、capability、golden、diagnostic code、验收命令和预计影响的 schema/ABI 版本。新增 issue 不应绕开 backlog 的依赖图；若需要改变阶段顺序，先更新路线图和变更控制记录。
