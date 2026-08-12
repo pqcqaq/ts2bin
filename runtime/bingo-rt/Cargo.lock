@@ -7,8 +7,16 @@ name = "bingo-abi"
 version = "0.1.0"
 
 [[package]]
+name = "bingo-memory"
+version = "0.1.0"
+dependencies = [
+ "bingo-abi",
+]
+
+[[package]]
 name = "bingo-runtime"
 version = "0.1.0"
 dependencies = [
  "bingo-abi",
+ "bingo-memory",
 ]

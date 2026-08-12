@@ -1,0 +1,13 @@
+{
+  "profile": "interop",
+  "capabilities": [
+    {
+      "logicalName": "rt.dynamic.property_load",
+      "symbolName": "bingo_dynamic_property_load_v1",
+      "abiVersion": "1.0.0",
+      "signature": "u32(dynamic-value-v1,utf16-string-view,dynamic-value-v1*)",
+      "effects": ["call", "read", "throw"],
+      "requiredFeatures": []
+    }
+  ]
+}

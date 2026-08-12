@@ -4,3 +4,108 @@
 pub extern "C" fn bingo_rt_abi_version_v1() -> u32 {
     crate::abi_version()
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_heap_reset_v1() -> u32 {
+    crate::gc_heap_reset()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_alloc_v1(
+    shape: *const bingo_abi::BingoShapeDescriptorV1,
+    out_object: *mut *mut bingo_abi::BingoObjectHeaderV1,
+) -> u32 {
+    crate::gc_alloc(shape, out_object)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_frame_link_v1(frame: *mut bingo_abi::BingoGcFrameV1) -> u32 {
+    crate::gc_frame_link(frame)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_frame_unlink_v1(frame: *mut bingo_abi::BingoGcFrameV1) -> u32 {
+    crate::gc_frame_unlink(frame)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_root_store_v1(
+    frame: *mut bingo_abi::BingoGcFrameV1,
+    slot: u32,
+    value: *mut bingo_abi::BingoObjectHeaderV1,
+) -> u32 {
+    crate::gc_root_store(frame, slot, value)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_root_clear_v1(frame: *mut bingo_abi::BingoGcFrameV1, slot: u32) -> u32 {
+    crate::gc_root_clear(frame, slot)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_root_publish_v1(
+    frame: *mut bingo_abi::BingoGcFrameV1,
+    active_bits: u64,
+) -> u32 {
+    crate::gc_root_publish(frame, active_bits)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_root_reload_v1(
+    frame: *mut bingo_abi::BingoGcFrameV1,
+    slot: u32,
+    out_object: *mut *mut bingo_abi::BingoObjectHeaderV1,
+) -> u32 {
+    crate::gc_root_reload(frame, slot, out_object)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_safepoint_v1() -> u32 {
+    crate::gc_safepoint()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_collect_v1() -> u32 {
+    crate::gc_collect()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_write_barrier_v1(
+    owner: *mut bingo_abi::BingoObjectHeaderV1,
+    slot_offset: u32,
+    value: *mut bingo_abi::BingoObjectHeaderV1,
+) -> u32 {
+    crate::gc_write_barrier(owner, slot_offset, value)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_gc_stats_v1(out_stats: *mut bingo_abi::BingoGcStatsV1) -> u32 {
+    crate::gc_stats(out_stats)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_shape_matches_v1(
+    object: *mut bingo_abi::BingoObjectHeaderV1,
+    target_shape: *const bingo_abi::BingoShapeDescriptorV1,
+    out_match: *mut u8,
+) -> u32 {
+    crate::shape_matches(object, target_shape, out_match)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_dynamic_property_load_v1(
+    receiver: bingo_abi::BingoDynamicValueV1,
+    key: bingo_abi::BingoUtf16ViewV1,
+    out_value: *mut bingo_abi::BingoDynamicValueV1,
+) -> u32 {
+    crate::dynamic_property_load(receiver, key, out_value)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bingo_host_number_record_register_v1(
+    properties: *const bingo_abi::BingoHostNumberPropertyV1,
+    property_count: u64,
+    out_object: *mut bingo_abi::BingoDynamicValueV1,
+) -> u32 {
+    crate::host_number_record_register(properties, property_count, out_object)
+}

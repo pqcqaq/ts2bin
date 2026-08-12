@@ -2,3 +2,92 @@
 
 pub const ABI_SCHEMA_VERSION: u32 = 1;
 pub const RUNTIME_ABI_VERSION: u32 = 1;
+pub const OBJECT_LAYOUT_SCHEMA_VERSION: u32 = 1;
+pub const OBJECT_LAYOUT_SCHEMA_HASH: &str =
+    "4555badb0483481f50ef898d7401c71532793ecc42c5398f3353823e244a65a1";
+pub const BINGO_GC_OK: u32 = 0;
+pub const BINGO_GC_INVALID_ARGUMENT: u32 = 1;
+pub const BINGO_GC_WRONG_THREAD: u32 = 2;
+pub const BINGO_GC_OUT_OF_MEMORY: u32 = 3;
+pub const BINGO_GC_CORRUPT_HEAP: u32 = 4;
+pub const BINGO_GC_FRAME_STATE: u32 = 5;
+pub const BINGO_DYNAMIC_EXCEPTION: u32 = 6;
+
+#[repr(C)]
+pub struct BingoObjectHeaderV1 {
+    pub descriptor: *const core::ffi::c_void,
+    pub size_bytes: usize,
+    pub gc_word: usize,
+}
+
+#[repr(C)]
+pub struct BingoShapeDescriptorV1 {
+    pub schema_version: u32,
+    pub flags: u32,
+    pub object_size: usize,
+    pub object_align: usize,
+    pub property_count: u32,
+    pub presence_word_count: u32,
+    pub properties: *const core::ffi::c_void,
+    pub trace: *const core::ffi::c_void,
+}
+
+#[repr(C)]
+pub struct BingoPropertyDescriptorV1 {
+    pub key: *const core::ffi::c_void,
+    pub kind: u8,
+    pub flags: u8,
+    pub reserved: u16,
+    pub field_offset: u32,
+    pub presence_bit: u32,
+    pub slot: u32,
+    pub enumeration_order: u32,
+    pub value_descriptor: *const core::ffi::c_void,
+}
+
+#[repr(C)]
+pub struct BingoTraceDescriptorV1 {
+    pub schema_version: u32,
+    pub flags: u32,
+    pub object_size: usize,
+    pub pointer_count: u32,
+    pub pointer_map_words: u32,
+    pub pointer_offsets: *const core::ffi::c_void,
+    pub trace_callback: *const core::ffi::c_void,
+}
+
+#[repr(C)]
+pub struct BingoGcFrameV1 {
+    pub previous: *mut BingoGcFrameV1,
+    pub slots: *mut *mut BingoObjectHeaderV1,
+    pub slot_count: u32,
+    pub reserved: u32,
+    pub active_bits: u64,
+}
+
+#[repr(C)]
+pub struct BingoGcStatsV1 {
+    pub allocated_objects: usize,
+    pub allocated_bytes: usize,
+    pub collections: usize,
+}
+
+#[repr(C)]
+pub struct BingoDynamicValueV1 {
+    pub tag: u32,
+    pub reserved: u32,
+    pub payload: u64,
+}
+
+#[repr(C)]
+pub struct BingoUtf16ViewV1 {
+    pub data: *const u16,
+    pub length: u64,
+}
+
+#[repr(C)]
+pub struct BingoHostNumberPropertyV1 {
+    pub key_data: *const u16,
+    pub key_length: u64,
+    pub number_bits: u64,
+}

@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/bingo-abi",
+  "crates/bingo-memory",
   "crates/bingo-runtime",
 ]
 resolver = "3"

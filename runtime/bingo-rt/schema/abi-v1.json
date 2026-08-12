@@ -1,6 +1,49 @@
 {
   "schemaVersion": 1,
   "runtimeABIVersion": 1,
+  "structs": [
+    {
+      "name": "BingoGcFrameV1",
+      "fields": [
+        {"name": "previous", "type": "frame_ptr"},
+        {"name": "slots", "type": "object_slots_ptr"},
+        {"name": "slot_count", "type": "u32"},
+        {"name": "reserved", "type": "u32"},
+        {"name": "active_bits", "type": "u64"}
+      ]
+    },
+    {
+      "name": "BingoGcStatsV1",
+      "fields": [
+        {"name": "allocated_objects", "type": "usize"},
+        {"name": "allocated_bytes", "type": "usize"},
+        {"name": "collections", "type": "usize"}
+      ]
+    },
+    {
+      "name": "BingoDynamicValueV1",
+      "fields": [
+        {"name": "tag", "type": "u32"},
+        {"name": "reserved", "type": "u32"},
+        {"name": "payload", "type": "u64"}
+      ]
+    },
+    {
+      "name": "BingoUtf16ViewV1",
+      "fields": [
+        {"name": "data", "type": "u16_ptr"},
+        {"name": "length", "type": "u64"}
+      ]
+    },
+    {
+      "name": "BingoHostNumberPropertyV1",
+      "fields": [
+        {"name": "key_data", "type": "u16_ptr"},
+        {"name": "key_length", "type": "u64"},
+        {"name": "number_bits", "type": "u64"}
+      ]
+    }
+  ],
   "functions": [
     {
       "name": "bingo_rt_abi_version_v1",
@@ -8,6 +51,144 @@
       "parameters": [],
       "implementation": "runtime",
       "worker": "abi_version"
+    },
+    {
+      "name": "bingo_gc_heap_reset_v1",
+      "returnType": "u32",
+      "parameters": [],
+      "implementation": "runtime",
+      "worker": "gc_heap_reset"
+    },
+    {
+      "name": "bingo_gc_alloc_v1",
+      "returnType": "u32",
+      "parameters": [
+        {"name": "shape", "type": "shape_ptr"},
+        {"name": "out_object", "type": "object_out"}
+      ],
+      "implementation": "runtime",
+      "worker": "gc_alloc"
+    },
+    {
+      "name": "bingo_gc_frame_link_v1",
+      "returnType": "u32",
+      "parameters": [{"name": "frame", "type": "frame_ptr"}],
+      "implementation": "runtime",
+      "worker": "gc_frame_link"
+    },
+    {
+      "name": "bingo_gc_frame_unlink_v1",
+      "returnType": "u32",
+      "parameters": [{"name": "frame", "type": "frame_ptr"}],
+      "implementation": "runtime",
+      "worker": "gc_frame_unlink"
+    },
+    {
+      "name": "bingo_gc_root_store_v1",
+      "returnType": "u32",
+      "parameters": [
+        {"name": "frame", "type": "frame_ptr"},
+        {"name": "slot", "type": "u32"},
+        {"name": "value", "type": "object_ptr"}
+      ],
+      "implementation": "runtime",
+      "worker": "gc_root_store"
+    },
+    {
+      "name": "bingo_gc_root_clear_v1",
+      "returnType": "u32",
+      "parameters": [
+        {"name": "frame", "type": "frame_ptr"},
+        {"name": "slot", "type": "u32"}
+      ],
+      "implementation": "runtime",
+      "worker": "gc_root_clear"
+    },
+    {
+      "name": "bingo_gc_root_publish_v1",
+      "returnType": "u32",
+      "parameters": [
+        {"name": "frame", "type": "frame_ptr"},
+        {"name": "active_bits", "type": "u64"}
+      ],
+      "implementation": "runtime",
+      "worker": "gc_root_publish"
+    },
+    {
+      "name": "bingo_gc_root_reload_v1",
+      "returnType": "u32",
+      "parameters": [
+        {"name": "frame", "type": "frame_ptr"},
+        {"name": "slot", "type": "u32"},
+        {"name": "out_object", "type": "object_out"}
+      ],
+      "implementation": "runtime",
+      "worker": "gc_root_reload"
+    },
+    {
+      "name": "bingo_gc_safepoint_v1",
+      "returnType": "u32",
+      "parameters": [],
+      "implementation": "runtime",
+      "worker": "gc_safepoint"
+    },
+    {
+      "name": "bingo_gc_collect_v1",
+      "returnType": "u32",
+      "parameters": [],
+      "implementation": "runtime",
+      "worker": "gc_collect"
+    },
+    {
+      "name": "bingo_gc_write_barrier_v1",
+      "returnType": "u32",
+      "parameters": [
+        {"name": "owner", "type": "object_ptr"},
+        {"name": "slot_offset", "type": "u32"},
+        {"name": "value", "type": "object_ptr"}
+      ],
+      "implementation": "runtime",
+      "worker": "gc_write_barrier"
+    },
+    {
+      "name": "bingo_gc_stats_v1",
+      "returnType": "u32",
+      "parameters": [{"name": "out_stats", "type": "stats_ptr"}],
+      "implementation": "runtime",
+      "worker": "gc_stats"
+    },
+    {
+      "name": "bingo_shape_matches_v1",
+      "returnType": "u32",
+      "parameters": [
+        {"name": "object", "type": "object_ptr"},
+        {"name": "target_shape", "type": "shape_ptr"},
+        {"name": "out_match", "type": "u8_ptr"}
+      ],
+      "implementation": "runtime",
+      "worker": "shape_matches"
+    },
+    {
+      "name": "bingo_dynamic_property_load_v1",
+      "returnType": "u32",
+      "parameters": [
+        {"name": "receiver", "type": "dynamic_value"},
+        {"name": "key", "type": "utf16_view"},
+        {"name": "out_value", "type": "dynamic_value_out"}
+      ],
+      "implementation": "runtime",
+      "worker": "dynamic_property_load"
+    },
+    {
+      "name": "bingo_host_number_record_register_v1",
+      "returnType": "u32",
+      "parameters": [
+        {"name": "properties", "type": "host_number_properties_ptr"},
+        {"name": "property_count", "type": "u64"},
+        {"name": "out_object", "type": "dynamic_value_out"}
+      ],
+      "implementation": "runtime",
+      "worker": "host_number_record_register"
     },
     {
       "name": "bingo_startup_empty_v1",

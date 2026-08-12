@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "structs": [
+    {
+      "name": "BingoObjectHeaderV1",
+      "fields": [
+        {"name": "descriptor", "type": "ptr"},
+        {"name": "size_bytes", "type": "usize"},
+        {"name": "gc_word", "type": "usize"}
+      ]
+    },
+    {
+      "name": "BingoShapeDescriptorV1",
+      "fields": [
+        {"name": "schema_version", "type": "u32"},
+        {"name": "flags", "type": "u32"},
+        {"name": "object_size", "type": "usize"},
+        {"name": "object_align", "type": "usize"},
+        {"name": "property_count", "type": "u32"},
+        {"name": "presence_word_count", "type": "u32"},
+        {"name": "properties", "type": "ptr"},
+        {"name": "trace", "type": "ptr"}
+      ]
+    },
+    {
+      "name": "BingoPropertyDescriptorV1",
+      "fields": [
+        {"name": "key", "type": "ptr"},
+        {"name": "kind", "type": "u8"},
+        {"name": "flags", "type": "u8"},
+        {"name": "reserved", "type": "u16"},
+        {"name": "field_offset", "type": "u32"},
+        {"name": "presence_bit", "type": "u32"},
+        {"name": "slot", "type": "u32"},
+        {"name": "enumeration_order", "type": "u32"},
+        {"name": "value_descriptor", "type": "ptr"}
+      ]
+    },
+    {
+      "name": "BingoTraceDescriptorV1",
+      "fields": [
+        {"name": "schema_version", "type": "u32"},
+        {"name": "flags", "type": "u32"},
+        {"name": "object_size", "type": "usize"},
+        {"name": "pointer_count", "type": "u32"},
+        {"name": "pointer_map_words", "type": "u32"},
+        {"name": "pointer_offsets", "type": "ptr"},
+        {"name": "trace_callback", "type": "ptr"}
+      ]
+    }
+  ]
+}

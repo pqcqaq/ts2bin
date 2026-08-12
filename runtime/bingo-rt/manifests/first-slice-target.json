@@ -22,6 +22,13 @@
   "coalesceHarnessObject": "bingo_coalesce_harness.o",
   "coalesceAssignHarnessObject": "bingo_coalesce_assign_harness.o",
   "stringLengthHarnessObject": "bingo_string_length_harness.o",
+  "objectAliasHarnessObject": "bingo_object_alias_harness.o",
+  "propertyNullishAssignHarnessObject": "bingo_property_nullish_assign_harness.o",
+  "closureCounterHarnessObject": "bingo_closure_counter_harness.o",
+  "classCounterHarnessObject": "bingo_class_counter_harness.o",
+  "derivedCounterHarnessObject": "bingo_derived_counter_harness.o",
+  "classAccessHarnessObject": "bingo_class_access_harness.o",
+  "checkedObjectCastHarnessObject": "bingo_checked_object_cast_harness.o",
   "capabilities": [
     {
       "logicalName": "rt.abi.version",
@@ -29,6 +36,110 @@
       "abiVersion": "1.0.0",
       "signature": "() -> u32",
       "effects": [],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.alloc",
+      "symbolName": "bingo_gc_alloc_v1",
+      "abiVersion": "1.0.0",
+      "signature": "(*const shape, **object) -> status",
+      "effects": ["allocate", "safepoint"],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.collect",
+      "symbolName": "bingo_gc_collect_v1",
+      "abiVersion": "1.0.0",
+      "signature": "() -> status",
+      "effects": ["safepoint"],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.frame.link",
+      "symbolName": "bingo_gc_frame_link_v1",
+      "abiVersion": "1.0.0",
+      "signature": "(*frame) -> status",
+      "effects": ["root-publication"],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.frame.unlink",
+      "symbolName": "bingo_gc_frame_unlink_v1",
+      "abiVersion": "1.0.0",
+      "signature": "(*frame) -> status",
+      "effects": ["root-publication"],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.heap.reset",
+      "symbolName": "bingo_gc_heap_reset_v1",
+      "abiVersion": "1.0.0",
+      "signature": "() -> status",
+      "effects": [],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.root.clear",
+      "symbolName": "bingo_gc_root_clear_v1",
+      "abiVersion": "1.0.0",
+      "signature": "(*frame, u32) -> status",
+      "effects": ["root-publication"],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.root.publish",
+      "symbolName": "bingo_gc_root_publish_v1",
+      "abiVersion": "1.0.0",
+      "signature": "(*frame, u64) -> status",
+      "effects": ["root-publication"],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.root.reload",
+      "symbolName": "bingo_gc_root_reload_v1",
+      "abiVersion": "1.0.0",
+      "signature": "(*frame, u32, **object) -> status",
+      "effects": ["root-publication"],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.root.store",
+      "symbolName": "bingo_gc_root_store_v1",
+      "abiVersion": "1.0.0",
+      "signature": "(*frame, u32, *object) -> status",
+      "effects": ["root-publication"],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.safepoint",
+      "symbolName": "bingo_gc_safepoint_v1",
+      "abiVersion": "1.0.0",
+      "signature": "() -> status",
+      "effects": ["safepoint"],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.stats",
+      "symbolName": "bingo_gc_stats_v1",
+      "abiVersion": "1.0.0",
+      "signature": "(*stats) -> status",
+      "effects": ["read"],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.object.shape_matches",
+      "symbolName": "bingo_shape_matches_v1",
+      "abiVersion": "1.0.0",
+      "signature": "(*object, *shape, *u8) -> status",
+      "effects": ["read"],
+      "requiredFeatures": []
+    },
+    {
+      "logicalName": "rt.gc.write_barrier",
+      "symbolName": "bingo_gc_write_barrier_v1",
+      "abiVersion": "1.0.0",
+      "signature": "(*object, u32, *object) -> status",
+      "effects": ["write"],
       "requiredFeatures": []
     }
   ]

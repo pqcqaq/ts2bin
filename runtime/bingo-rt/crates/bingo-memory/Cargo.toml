@@ -1,13 +1,12 @@
 [package]
-name = "bingo-runtime"
+name = "bingo-memory"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["rlib"]
 
 [dependencies]
 bingo-abi = { path = "../bingo-abi" }
-bingo-memory = { path = "../bingo-memory" }

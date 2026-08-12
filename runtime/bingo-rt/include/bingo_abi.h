@@ -3,6 +3,7 @@
 #define BINGO_ABI_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 typedef struct BingoNullableNumber {
     uint8_t tag;
@@ -15,14 +16,108 @@ typedef struct BingoUtf16String {
     uint64_t length;
 } BingoUtf16String;
 
+typedef struct BingoObjectHeaderV1 {
+    const void * descriptor;
+    size_t size_bytes;
+    size_t gc_word;
+} BingoObjectHeaderV1;
+
+typedef struct BingoShapeDescriptorV1 {
+    uint32_t schema_version;
+    uint32_t flags;
+    size_t object_size;
+    size_t object_align;
+    uint32_t property_count;
+    uint32_t presence_word_count;
+    const void * properties;
+    const void * trace;
+} BingoShapeDescriptorV1;
+
+typedef struct BingoPropertyDescriptorV1 {
+    const void * key;
+    uint8_t kind;
+    uint8_t flags;
+    uint16_t reserved;
+    uint32_t field_offset;
+    uint32_t presence_bit;
+    uint32_t slot;
+    uint32_t enumeration_order;
+    const void * value_descriptor;
+} BingoPropertyDescriptorV1;
+
+typedef struct BingoTraceDescriptorV1 {
+    uint32_t schema_version;
+    uint32_t flags;
+    size_t object_size;
+    uint32_t pointer_count;
+    uint32_t pointer_map_words;
+    const void * pointer_offsets;
+    const void * trace_callback;
+} BingoTraceDescriptorV1;
+
+typedef struct BingoGcFrameV1 {
+    struct BingoGcFrameV1 * previous;
+    BingoObjectHeaderV1 ** slots;
+    uint32_t slot_count;
+    uint32_t reserved;
+    uint64_t active_bits;
+} BingoGcFrameV1;
+
+typedef struct BingoGcStatsV1 {
+    size_t allocated_objects;
+    size_t allocated_bytes;
+    size_t collections;
+} BingoGcStatsV1;
+
+typedef struct BingoDynamicValueV1 {
+    uint32_t tag;
+    uint32_t reserved;
+    uint64_t payload;
+} BingoDynamicValueV1;
+
+typedef struct BingoUtf16ViewV1 {
+    const uint16_t * data;
+    uint64_t length;
+} BingoUtf16ViewV1;
+
+typedef struct BingoHostNumberPropertyV1 {
+    const uint16_t * key_data;
+    uint64_t key_length;
+    uint64_t number_bits;
+} BingoHostNumberPropertyV1;
+
 #define BINGO_ABI_SCHEMA_VERSION 1u
 #define BINGO_RUNTIME_ABI_VERSION 1u
+#define BINGO_OBJECT_LAYOUT_SCHEMA_VERSION 1u
+#define BINGO_OBJECT_LAYOUT_SCHEMA_HASH "4555badb0483481f50ef898d7401c71532793ecc42c5398f3353823e244a65a1"
+#define BINGO_GC_OK 0u
+#define BINGO_GC_INVALID_ARGUMENT 1u
+#define BINGO_GC_WRONG_THREAD 2u
+#define BINGO_GC_OUT_OF_MEMORY 3u
+#define BINGO_GC_CORRUPT_HEAP 4u
+#define BINGO_GC_FRAME_STATE 5u
+#define BINGO_DYNAMIC_EXCEPTION 6u
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 uint32_t bingo_rt_abi_version_v1(void);
+uint32_t bingo_gc_heap_reset_v1(void);
+uint32_t bingo_gc_alloc_v1(const BingoShapeDescriptorV1 * shape, BingoObjectHeaderV1 ** out_object);
+uint32_t bingo_gc_frame_link_v1(BingoGcFrameV1 * frame);
+uint32_t bingo_gc_frame_unlink_v1(BingoGcFrameV1 * frame);
+uint32_t bingo_gc_root_store_v1(BingoGcFrameV1 * frame, uint32_t slot, BingoObjectHeaderV1 * value);
+uint32_t bingo_gc_root_clear_v1(BingoGcFrameV1 * frame, uint32_t slot);
+uint32_t bingo_gc_root_publish_v1(BingoGcFrameV1 * frame, uint64_t active_bits);
+uint32_t bingo_gc_root_reload_v1(BingoGcFrameV1 * frame, uint32_t slot, BingoObjectHeaderV1 ** out_object);
+uint32_t bingo_gc_safepoint_v1(void);
+uint32_t bingo_gc_collect_v1(void);
+uint32_t bingo_gc_write_barrier_v1(BingoObjectHeaderV1 * owner, uint32_t slot_offset, BingoObjectHeaderV1 * value);
+uint32_t bingo_gc_stats_v1(BingoGcStatsV1 * out_stats);
+uint32_t bingo_shape_matches_v1(BingoObjectHeaderV1 * object, const BingoShapeDescriptorV1 * target_shape, uint8_t * out_match);
+uint32_t bingo_dynamic_property_load_v1(BingoDynamicValueV1 receiver, BingoUtf16ViewV1 key, BingoDynamicValueV1 * out_value);
+uint32_t bingo_host_number_record_register_v1(const BingoHostNumberPropertyV1 * properties, uint64_t property_count, BingoDynamicValueV1 * out_object);
 void bingo_startup_empty_v1(void);
 uint32_t bingo_application_startup_v1(void);
 double bingo_program_main_v1(void);
